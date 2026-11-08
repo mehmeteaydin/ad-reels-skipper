@@ -7,13 +7,19 @@
 - Agents never print secret values, even when debugging.
 
 ## Input & output
-<!-- Validation strategy at boundaries; what is escaped/encoded; what never leaks in error messages. -->
+- **Screen content**: Accessibility node hierarchies are inspected in-memory only. Node texts are never stored, logged, or serialized.
+- **User input**: Custom keywords entered in settings are trimmed, validated for length (1-50 characters), and sanitized against regex injection.
+- **Log safety**: Logcat output in debug mode must never dump entire view hierarchies or arbitrary text; logs are restricted to operation milestones (e.g. "Ad detected", "Gesture dispatched").
 
 ## AuthN / AuthZ
-<!-- Who may call what; where authorization is enforced; default-deny statements. -->
+- **OS Enforcement**: The service is guarded by `android.permission.BIND_ACCESSIBILITY_SERVICE` so only the Android system framework can bind to it.
+- **Package Filtering**: The service rejects all events whose `packageName` does not match `com.instagram.android`.
+- **Zero Network Guarantee**: The app does not declare or request `android.permission.INTERNET`. The OS forbids all outbound and inbound network traffic.
 
 ## Dependencies
-<!-- Policy for adding new dependencies: who approves, what gets checked (license, maintenance, CVEs). -->
+- **Minimal footprint**: Only official AndroidX, Jetpack Compose, KotlinX Coroutines, and DataStore libraries are permitted.
+- **Approval policy**: Adding any third-party library requires explicit human approval, license verification (permissive Apache-2.0 or MIT only), and CVE audit.
+- **Networking libraries banned**: Inclusion of HTTP clients (OkHttp, Retrofit, Ktor, Volley) or analytics SDKs is strictly prohibited.
 
 ## Review lens
 Security is a mandatory dimension of every independent review (see `prompts/review.md`), not a
