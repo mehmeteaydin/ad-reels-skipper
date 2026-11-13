@@ -13,3 +13,5 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   — Recommendation: <the reviewer's action> — Deferred by: <name>, <YYYY-MM-DD>, <why>
   A decision deferred at bootstrap (its REPORT) uses Source: bootstrap <YYYY-MM-DD>.
 -->
+
+- **B-1** — AndroidManifest.xml uses fallback framework icon (@android:drawable/sym_def_app_icon) instead of a custom app launcher icon — Source: spec 0001, review round 1 (app/src/main/AndroidManifest.xml:6-8) — Severity: Info — Recommendation: Add custom adaptive launcher icon during UI/dashboard spec — Deferred by: mortvivant, 2026-11-13, acceptable for walking skeleton
