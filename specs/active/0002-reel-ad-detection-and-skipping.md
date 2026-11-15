@@ -1,6 +1,6 @@
 # Spec 0002 — Reel Ad Detection and Skipping
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0002-plan.md`
 - Self-critique: done
