@@ -61,6 +61,11 @@ class ManifestVerificationTest {
             root.androidAttr("canRetrieveWindowContent"),
             "Accessibility config must enable window content retrieval"
         )
+        assertEquals(
+            "true",
+            root.androidAttr("canPerformGestures"),
+            "Accessibility config must enable gesture execution"
+        )
     }
 
     private fun resolveAppFile(appRelativePath: String): File {
