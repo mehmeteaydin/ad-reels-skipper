@@ -8,11 +8,20 @@
 - The whole suite runs inside `scripts/check` — one command, everywhere.
 
 ## Frameworks & layout
-<!-- Test framework(s), where tests live, naming pattern. -->
+- **JVM Unit Tests**: JUnit 5 (`org.junit.jupiter`) with `kotlin.test` assertions, located in `app/src/test/kotlin/`.
+- **Mocking**: `mockk` or lightweight test doubles for repositories and timers.
+- **Naming**: Tests end in `Test.kt`. Test methods use backtick sentences describing expected behavior: ``fun `ignores event when master toggle is disabled`()``.
 
 ## What must be tested
-<!-- e.g. every business rule (BR-n), every boundary/forbidden dependency; the e2e journeys and
-     budget, if the project has e2e at all (Test layers). -->
+- **All business rules (BR-1 to BR-7)**:
+  - Detection logic across case variants, mixed casing, and special characters.
+  - Multi-language keyword sets (English, Turkish, custom).
+  - Debounce and cooldown window timing.
+  - Master toggle gating.
+  - Lifetime skip count increments.
+- **DataStore repository**: Persistence and retrieval of preferences, keyword sets, and counts.
+- **ViewModels**: UI state emissions (`StateFlow`), toggle actions, and validation of user-added keywords.
+- **Architecture rules**: Verification that `domain` contains zero imports from `android.*`.
 
 ## Test layers
 1. **The cheapest test that proves the criterion.** Unit first, then component or integration

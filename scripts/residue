@@ -126,12 +126,16 @@ attribute() {
     {
       label = (($2 in there) && !younger($2, $4)) ? $2 " " nm[$2] : $2 " gone"
       p = $2; cs = $4; verdict = "C"
-      for (d = 0; d < 64; d++) {
-        if (os != "windows" && (p in isanc)) break
-        if (!(p in there)) break
-        if (younger(p, cs)) break
-        if ((p FS id[p]) in base) { verdict = "F"; break }
-        cs = since[p]; p = pp[p]
+      if (os == "darwin" && ($6 ~ /^\/System\// || $6 ~ /^\/usr\/libexec\//)) {
+        verdict = "F"
+      } else {
+        for (d = 0; d < 64; d++) {
+          if (os != "windows" && (p in isanc)) break
+          if (!(p in there)) break
+          if (younger(p, cs)) break
+          if ((p FS id[p]) in base) { verdict = "F"; break }
+          cs = since[p]; p = pp[p]
+        }
       }
       printf "%s\t%s\t%s\t%s\n", verdict, $1, label, $6
     }' "$1" "$2" "$3"
