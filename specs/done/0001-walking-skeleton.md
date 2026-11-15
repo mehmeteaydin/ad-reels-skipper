@@ -1,6 +1,6 @@
 # Spec 0001 — Walking Skeleton
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0001-plan.md`
 - Self-critique: done
@@ -31,24 +31,24 @@ Establish the minimal foundational Android project structure and Gradle toolchai
   - Production release signing configurations.
 
 ## Acceptance criteria
-- [ ] AC-1 — Gradle toolchain builds the Android debug application (`assembleDebug`) without errors, generating the APK output.
-- [ ] AC-2 — `AndroidManifest.xml` declares `SkipperAccessibilityService` requiring `android.permission.BIND_ACCESSIBILITY_SERVICE` and contains no `android.permission.INTERNET`.
-- [ ] AC-3 — Initial Compose activity renders the application title "Ad Reels Skipper", verified by a headless component test.
-- [ ] AC-4 — JVM unit test suite runs and passes cleanly via Gradle (`testDebugUnitTest`).
-- [ ] AC-5 — `./scripts/check` and `./scripts/check --fast` run active steps and exit with code 0.
+- [x] AC-1 — Gradle toolchain builds the Android debug application (`assembleDebug`) without errors, generating the APK output.
+- [x] AC-2 — `AndroidManifest.xml` declares `SkipperAccessibilityService` requiring `android.permission.BIND_ACCESSIBILITY_SERVICE` and contains no `android.permission.INTERNET`.
+- [x] AC-3 — Initial Compose activity renders the application title "Ad Reels Skipper", verified by a headless component test.
+- [x] AC-4 — JVM unit test suite runs and passes cleanly via Gradle (`testDebugUnitTest`).
+- [x] AC-5 — `./scripts/check` and `./scripts/check --fast` run active steps and exit with code 0.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 |
+| Review findings: real / noise / deferred | 4 / 2 / 4 (review triage; +B-6 at verify) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
