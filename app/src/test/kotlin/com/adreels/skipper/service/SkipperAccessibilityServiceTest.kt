@@ -148,20 +148,26 @@ class SkipperAccessibilityServiceTest {
 
     @Test
     fun `cancels pending skip without swiping when ad disappears before 400 ms delay`() {
-        var currentRoot = treeWith(
-            node(text = "Reels", selected = true, clickable = true),
-            node(text = "Sponsorlu"),
-        )
-        service.activeRootProvider = { currentRoot }
+        var isSponsored = true
+        service.activeRootProvider = {
+            if (isSponsored) {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Sponsorlu"),
+                )
+            } else {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Organic cooking reel"),
+                )
+            }
+        }
 
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
 
         fakeClockMs += 200L
-        currentRoot = treeWith(
-            node(text = "Reels", selected = true, clickable = true),
-            node(text = "Organic cooking reel"),
-        )
+        isSponsored = false
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
 
         assertNull(scheduler.pendingAction)
@@ -170,13 +176,79 @@ class SkipperAccessibilityServiceTest {
     }
 
     @Test
-    fun `caps visible node extraction at 500 and verifies swipe geometry`() {
+    fun `suppresses extraction during throttle, in-flight gesture window, and 1200 ms cooldown`() {
+        var rootFetches = 0
+        var showSponsored = true
+        service.activeRootProvider = {
+            rootFetches++
+            if (showSponsored) {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Sponsored"),
+                )
+            } else {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Organic reel"),
+                )
+            }
+        }
+
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(1, rootFetches)
+        assertNotNull(scheduler.pendingAction)
+
+        // Rapid event inside 150 ms throttle window must skip Binder tree extraction.
+        fakeClockMs += 50L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(1, rootFetches)
+
+        // Fire delayed skip at +400 ms (total 1_400 ms). Gesture 1 is now in flight.
+        fakeClockMs = 1_400L
+        scheduler.firePending()
+        assertEquals(2, rootFetches)
+        val shadowService = Shadows.shadowOf(service as AccessibilityService)
+        assertEquals(1, shadowService.gesturesDispatched.size)
+
+        // Mid-swipe scroll events (organic then next ad) arrive before onCompleted must not extract or schedule.
+        showSponsored = false
+        fakeClockMs = 1_460L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        showSponsored = true
+        fakeClockMs = 1_520L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(2, rootFetches)
+        assertNull(scheduler.pendingAction)
+
+        // Gesture 1 completes at 1_600 ms -> starts 1200 ms cooldown until 2_800 ms.
+        fakeClockMs = 1_600L
+        val dispatched = shadowService.gesturesDispatched.single()
+        dispatched.callback()?.onCompleted(dispatched.description())
+
+        fakeClockMs = 2_799L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(2, rootFetches)
+        assertNull(scheduler.pendingAction)
+
+        fakeClockMs = 2_800L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(3, rootFetches)
+        assertNotNull(scheduler.pendingAction)
+    }
+
+    @Test
+    fun `caps visible node extraction at 500, skips invisible nodes, and verifies swipe geometry`() {
         val extractor = AccessibilityTreeExtractor(maxVisibleNodes = 500)
-        val children = Array(550) { idx -> node(text = "item-$idx") }
+        val children = arrayOf(
+            node(text = "Sponsored", visible = false),
+            node(text = "Reels", contentDescription = "Reels", visible = false, selected = true),
+        ) + Array(550) { idx -> node(text = "item-$idx", visible = true) }
         val bigRoot = treeWith(*children)
 
         val snapshot = extractor.extract(SkipperConfig.TARGET_PACKAGE, bigRoot)
         assertEquals(500, snapshot.nodes.size)
+        assertTrue(snapshot.nodes.all { it.isVisibleToUser })
+        assertTrue(snapshot.nodes.none { it.text == "Sponsored" || it.text == "Reels" })
         assertTrue(extractor.extract(SkipperConfig.TARGET_PACKAGE, null).nodes.isEmpty())
 
         val dispatcher = SwipeGestureDispatcher()
@@ -238,5 +310,103 @@ class SkipperAccessibilityServiceTest {
 
         service.activeRootProvider = { throw IllegalStateException("Window binder died") }
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+    }
+
+    @Test
+    fun `aborts pre-dispatch on stale freshRoot, recovers from cancelled swipe, and resets on lifecycle callbacks`() {
+        var rootFetches = 0
+        service.activeRootProvider = {
+            rootFetches++
+            null
+        }
+        service.onAccessibilityEvent(null)
+        service.onAccessibilityEvent(instagramEvent(null))
+        assertEquals(0, rootFetches)
+
+        // 1. Pre-dispatch abort when window flips to organic Reel before timer fires (no intermediate event).
+        var phase = "ad"
+        service.activeRootProvider = {
+            when (phase) {
+                "ad" -> treeWith(node(text = "Reels", selected = true, clickable = true), node(text = "Sponsored"))
+                "other_pkg" -> treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Sponsored"),
+                    packageName = "com.android.launcher",
+                )
+                else -> treeWith(node(text = "Reels", selected = true, clickable = true), node(text = "Organic"))
+            }
+        }
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "organic"
+        fakeClockMs += 400L
+        scheduler.firePending()
+        val shadowService = Shadows.shadowOf(service as AccessibilityService)
+        assertTrue(shadowService.gesturesDispatched.isEmpty())
+
+        // 2. Pre-dispatch abort when window package leaves Instagram.
+        phase = "ad"
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "other_pkg"
+        fakeClockMs += 400L
+        scheduler.firePending()
+        assertTrue(shadowService.gesturesDispatched.isEmpty())
+
+        // 3. Dispatched swipe cancelled by OS recovers cleanly via onSkipFailed().
+        phase = "ad"
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 400L
+        scheduler.firePending()
+        assertEquals(1, shadowService.gesturesDispatched.size)
+        val firstDispatch = shadowService.gesturesDispatched.single()
+        firstDispatch.callback()?.onCancelled(firstDispatch.description())
+
+        // Should not wait 1200 ms cooldown after cancellation; resumes once throttle passes.
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+
+        // 4. onInterrupt() and onUnbind() cancel pending skip and reset detector state.
+        service.onInterrupt()
+        assertNull(scheduler.pendingAction)
+
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        service.onUnbind(null)
+        assertNull(scheduler.pendingAction)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun `recycles root and child accessibility nodes safely on API 33`() {
+        service.activeRootProvider = {
+            val container = node(text = "Container").also { containerNode ->
+                Shadows.shadowOf(containerNode).addChild(node(text = "Sponsored"))
+            }
+            treeWith(
+                node(text = "Reels", selected = true, clickable = true),
+                container,
+            )
+        }
+
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+
+        fakeClockMs += 400L
+        scheduler.firePending()
+
+        val shadowService = Shadows.shadowOf(service as AccessibilityService)
+        assertEquals(1, shadowService.gesturesDispatched.size)
+        val dispatched = shadowService.gesturesDispatched.single()
+        dispatched.callback()?.onCompleted(dispatched.description())
+
+        fakeClockMs += 1_200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
     }
 }

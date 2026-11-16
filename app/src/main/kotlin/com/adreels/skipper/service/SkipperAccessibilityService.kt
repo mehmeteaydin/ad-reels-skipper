@@ -2,6 +2,7 @@ package com.adreels.skipper.service
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -61,11 +62,12 @@ class SkipperAccessibilityService : AccessibilityService() {
         if (event == null) return
         val packageName = event.packageName?.toString()
         val config = configProvider()
+        val now = clockMs()
 
         if (!config.isMasterEnabled || packageName != TARGET_PACKAGE) {
             val decision = detector.evaluate(
                 snapshot = WindowSnapshot(packageName = packageName, nodes = emptyList()),
-                nowMs = clockMs(),
+                nowMs = now,
                 config = config,
             )
             if (decision is SkipDecision.CancelPendingSkip) {
@@ -75,10 +77,18 @@ class SkipperAccessibilityService : AccessibilityService() {
             return
         }
 
-        val root = safeActiveRoot()
-        val snapshot = treeExtractor.extract(packageName = packageName, root = root)
+        if (!detector.shouldInspectSnapshot(packageName = packageName, nowMs = now, config = config)) {
+            return
+        }
 
-        when (val decision = detector.evaluate(snapshot = snapshot, nowMs = clockMs(), config = config)) {
+        val root = safeActiveRoot()
+        val snapshot = try {
+            treeExtractor.extract(packageName = packageName, root = root)
+        } finally {
+            safeRecycleRoot(root)
+        }
+
+        when (val decision = detector.evaluate(snapshot = snapshot, nowMs = now, config = config)) {
             is SkipDecision.ScheduleSkip -> {
                 delayScheduler.cancelAll()
                 delayScheduler.schedule(decision.delayMs) { executeScheduledSkip() }
@@ -98,30 +108,40 @@ class SkipperAccessibilityService : AccessibilityService() {
 
     private fun executeScheduledSkip() {
         val config = configProvider()
+        val now = clockMs()
         val freshRoot = safeActiveRoot()
         if (freshRoot == null) {
+            delayScheduler.cancelAll()
             detector.onSkipFailed()
             return
         }
 
-        val freshPackage = freshRoot.packageName?.toString()
-        val freshSnapshot = treeExtractor.extract(packageName = freshPackage, root = freshRoot)
-        if (!detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config)) {
+        val freshSnapshot = try {
+            val freshPackage = freshRoot.packageName?.toString()
+            treeExtractor.extract(packageName = freshPackage, root = freshRoot)
+        } finally {
+            safeRecycleRoot(freshRoot)
+        }
+        if (!detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config, nowMs = now)) {
+            delayScheduler.cancelAll()
             detector.onSkipFailed()
             Log.d(TAG, "Pending skip aborted before dispatch")
             return
         }
 
         val (screenWidth, screenHeight) = safeDisplayBounds()
+        detector.onSkipDispatchStarted()
         gestureDispatcher.dispatchUpwardSwipe(
             service = this,
             screenWidth = screenWidth,
             screenHeight = screenHeight,
             onCompleted = {
+                delayScheduler.cancelAll()
                 detector.onSkipDispatched(clockMs())
                 Log.d(TAG, "Swipe gesture completed")
             },
             onFailed = {
+                delayScheduler.cancelAll()
                 detector.onSkipFailed()
                 Log.d(TAG, "Swipe gesture failed or cancelled")
             },
@@ -153,6 +173,17 @@ class SkipperAccessibilityService : AccessibilityService() {
             displayBoundsProvider()
         } catch (_: RuntimeException) {
             0 to 0
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun safeRecycleRoot(root: AccessibilityNodeInfo?) {
+        if (root != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                root.recycle()
+            } catch (_: RuntimeException) {
+                // Node already recycled or backed by a unit-test stub.
+            }
         }
     }
 
