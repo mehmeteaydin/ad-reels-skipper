@@ -185,6 +185,28 @@ class ReelAdDetectorTest {
             SkipDecision.ScheduleSkip(400L),
             detector.evaluate(nonClickableHeader, nowMs = 300L),
         )
+
+        val feedMentioningReels = ReelAdDetector()
+        val homeCaptionReelsMention = WindowSnapshot(
+            packageName = SkipperConfig.TARGET_PACKAGE,
+            nodes = listOf(
+                VisibleNode(text = "Instagram", isClickable = false),
+                VisibleNode(text = "Check out these Reels templates", isClickable = false),
+                VisibleNode(text = "Watch this reel by @creator", isClickable = false),
+                VisibleNode(text = "Sponsored"),
+                VisibleNode(
+                    text = "Reels",
+                    contentDescription = "Reels",
+                    isVisibleToUser = true,
+                    isSelected = false,
+                    isClickable = true,
+                ),
+            ),
+        )
+        assertEquals(
+            SkipDecision.Ignore(IgnoreReason.NOT_REELS_CONTEXT),
+            feedMentioningReels.evaluate(homeCaptionReelsMention, nowMs = 500L),
+        )
     }
 
     @Test
@@ -255,13 +277,27 @@ class ReelAdDetectorTest {
             nodes = listOf(reelsContextNode(), VisibleNode(text = "Sponsored")),
         )
 
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_000L))
         assertEquals(SkipDecision.ScheduleSkip(400L), detector.evaluate(adSnapshot, nowMs = 1_000L))
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_100L))
+
+        detector.onSkipDispatchStarted()
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_400L))
+        assertEquals(
+            SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),
+            detector.evaluate(adSnapshot, nowMs = 1_450L),
+        )
+        assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 1_450L))
+
         detector.onSkipDispatched(nowMs = 1_400L)
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_599L))
+        assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 2_599L))
 
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),
             detector.evaluate(adSnapshot, nowMs = 2_599L),
         )
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_600L))
         assertEquals(
             SkipDecision.ScheduleSkip(400L),
             detector.evaluate(adSnapshot, nowMs = 2_600L),

@@ -36,8 +36,8 @@ class DomainArchitectureTest {
     @Test
     fun `domain and service packages never log screen node text or content descriptions`() {
         val forbiddenLogPatterns = listOf(
-            Regex("""Log\.[vwidfe]\s*\(.*(\.text\b|\.contentDescription\b|VisibleNode|WindowSnapshot|nodes)"""),
-            Regex("""println\s*\(.*(\.text\b|\.contentDescription\b|VisibleNode|WindowSnapshot|nodes)"""),
+            Regex("""Log\.[vwidfe]\s*\(.*(\.text\b|\.contentDescription\b|VisibleNode|WindowSnapshot|nodes)""", RegexOption.DOT_MATCHES_ALL),
+            Regex("""println\s*\(.*(\.text\b|\.contentDescription\b|VisibleNode|WindowSnapshot|nodes)""", RegexOption.DOT_MATCHES_ALL),
         )
 
         val sourceDirs = listOf(

@@ -11,11 +11,38 @@ class ReelAdDetector {
     private var lastEvaluatedAtMs: Long? = null
     private var lastSkipDispatchedAtMs: Long? = null
     private var isSkipPending: Boolean = false
+    private var isGestureInFlight: Boolean = false
+
+    /**
+     * Lightweight pre-check allowing callers to avoid accessibility tree extraction when package,
+     * toggle, in-flight gesture, cooldown, or throttle gates already suppress snapshot inspection.
+     */
+    fun shouldInspectSnapshot(
+        packageName: String?,
+        nowMs: Long,
+        config: SkipperConfig = SkipperConfig(),
+    ): Boolean {
+        if (!config.isMasterEnabled || packageName != SkipperConfig.TARGET_PACKAGE) {
+            return false
+        }
+        if (isGestureInFlight) {
+            return false
+        }
+        val lastSkip = lastSkipDispatchedAtMs
+        if (!isSkipPending && lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
+            return false
+        }
+        val lastEval = lastEvaluatedAtMs
+        if (lastEval != null && nowMs - lastEval in 0L until config.throttleIntervalMs) {
+            return false
+        }
+        return true
+    }
 
     /**
      * Evaluates [snapshot] at timestamp [nowMs] against [config], applying package/toggle gates,
-     * cooldown suppression, throttling, visible-only node caps, Reels context rules, and
-     * locale-independent keyword boundary matching.
+     * in-flight and cooldown suppression, throttling, visible-only node caps, Reels context rules,
+     * and locale-independent keyword boundary matching.
      */
     fun evaluate(
         snapshot: WindowSnapshot,
@@ -27,6 +54,9 @@ class ReelAdDetector {
         }
         if (snapshot.packageName != SkipperConfig.TARGET_PACKAGE) {
             return cancelPendingOrIgnore(IgnoreReason.NON_TARGET_PACKAGE)
+        }
+        if (isGestureInFlight) {
+            return SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE)
         }
         val lastSkip = lastSkipDispatchedAtMs
         if (!isSkipPending && lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
@@ -65,33 +95,50 @@ class ReelAdDetector {
     }
 
     /**
-     * Re-checks whether [snapshot] still satisfies all rules right before executing a delayed swipe.
+     * Re-checks whether [snapshot] still satisfies all rules right before executing a delayed swipe,
+     * rejecting execution if a gesture is already in flight or cooldown is still active at [nowMs].
      */
     fun isSponsoredReelPresent(
         snapshot: WindowSnapshot,
         config: SkipperConfig = SkipperConfig(),
+        nowMs: Long? = null,
     ): Boolean {
-        if (!config.isMasterEnabled || snapshot.packageName != SkipperConfig.TARGET_PACKAGE) {
+        if (!config.isMasterEnabled || snapshot.packageName != SkipperConfig.TARGET_PACKAGE || isGestureInFlight) {
             return false
+        }
+        if (nowMs != null) {
+            val lastSkip = lastSkipDispatchedAtMs
+            if (lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
+                return false
+            }
         }
         val inspection = inspectSnapshot(snapshot, config)
         return inspection.hasReelsContext && inspection.hasSponsoredLabel
     }
 
+    /** Marks that an upward swipe gesture has started dispatching asynchronously. */
+    fun onSkipDispatchStarted() {
+        isSkipPending = false
+        isGestureInFlight = true
+    }
+
     /** Records that the swipe gesture completed/dispatched at [nowMs], opening the cooldown window. */
     fun onSkipDispatched(nowMs: Long) {
         isSkipPending = false
+        isGestureInFlight = false
         lastSkipDispatchedAtMs = nowMs
     }
 
-    /** Clears pending skip state when a scheduled gesture was aborted or failed before completion. */
+    /** Clears pending and in-flight skip state when a scheduled gesture was aborted or failed before completion. */
     fun onSkipFailed() {
         isSkipPending = false
+        isGestureInFlight = false
     }
 
     /** Resets all timing and pending state, e.g. when the service disconnects or is interrupted. */
     fun reset() {
         isSkipPending = false
+        isGestureInFlight = false
         lastEvaluatedAtMs = null
         lastSkipDispatchedAtMs = null
     }
@@ -145,9 +192,9 @@ class ReelAdDetector {
         val isSelectedReelsTab = node.isSelected &&
             (containsNormalizedPhrase(textTokens, REELS_TOKEN) ||
                 containsNormalizedPhrase(descTokens, REELS_TOKEN))
-        val isReelsViewerHeader = !node.isClickable && containsNormalizedPhrase(textTokens, REELS_TOKEN)
-        val isReelContentDescription = containsNormalizedPhrase(textTokens, REEL_BY_PREFIX) ||
-            containsNormalizedPhrase(descTokens, REEL_BY_PREFIX)
+        val isReelsViewerHeader = !node.isClickable && textTokens == REELS_TOKEN
+        val isReelContentDescription =
+            descTokens == REEL_BY_PREFIX || descTokens.startsWith("$REEL_BY_PREFIX ")
         return isSelectedReelsTab || isReelsViewerHeader || isReelContentDescription
     }
 
@@ -194,14 +241,6 @@ class ReelAdDetector {
                 }
             }
             return builder.toString().lowercase(Locale.ROOT)
-        }
-
-        /** Checks whether normalized [phrase] appears cleanly on word boundaries inside [rawText]. */
-        fun containsPhrase(rawText: String?, phrase: String): Boolean {
-            if (rawText.isNullOrBlank()) return false
-            val textTokens = normalizeTokens(rawText)
-            val phraseTokens = normalizeTokens(phrase)
-            return containsNormalizedPhrase(textTokens, phraseTokens)
         }
 
         private fun containsNormalizedPhrase(textTokens: String, phraseTokens: String): Boolean {
