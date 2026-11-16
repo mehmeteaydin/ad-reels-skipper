@@ -78,6 +78,9 @@ class ReelAdDetectorTest {
                     "Sponsorlu",
                     "SPONSORLU",
                     "Paid partnership",
+                    "PAID PARTNERSHIP",
+                    "PAİD PARTNERSHİP",
+                    "Paıd partnershıp",
                     "Paid partnership with Brand",
                 )
                 matchingLabels.forEachIndexed { idx, label ->

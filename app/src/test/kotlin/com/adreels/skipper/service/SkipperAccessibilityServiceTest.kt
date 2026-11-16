@@ -138,7 +138,12 @@ class SkipperAccessibilityServiceTest {
         val dispatched = shadowService.gesturesDispatched.single()
         val gesture = dispatched.description()
         assertEquals(1, gesture.strokeCount)
-        assertEquals(200L, gesture.getStroke(0).duration)
+        val stroke = gesture.getStroke(0)
+        assertEquals(200L, stroke.duration)
+        val strokePoints = Shadows.shadowOf(stroke.path).points
+        assertEquals(2, strokePoints.size)
+        assertEquals(strokePoints[0].x, strokePoints[1].x)
+        assertTrue(strokePoints[0].y > strokePoints[1].y)
         dispatched.callback()?.onCompleted(gesture)
 
         fakeClockMs += 500L
