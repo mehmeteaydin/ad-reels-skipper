@@ -1,6 +1,6 @@
 # Spec 0002 — Reel Ad Detection and Skipping
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0002-plan.md`
 - Self-critique: done
@@ -32,27 +32,27 @@ none — no user interface (background accessibility service behavior; user-faci
   - Non-Instagram platforms (TikTok, YouTube Shorts, Facebook Reels).
 
 ## Acceptance criteria
-- [ ] AC-1 — Given an accessibility event whose package name is null or not `"com.instagram.android"` (evaluated via `.toString()`, closing `B-3`), or when the `Master Toggle` state is `OFF`, the system ignores the event and dispatches no gesture.
-- [ ] AC-2 — Given visible (`isVisibleToUser == true`) node texts or content descriptions within an active Reels viewer window, the `Ad Detector` returns a skip decision when any visible node matches `"Sponsored"`, `"Sponsorlu"`, or `"Paid partnership"` across word/phrase boundaries with Turkish/ASCII case-insensitive normalization (including uppercase `"SPONSORLU"` and surrounding punctuation such as `"• Sponsored •"`), and returns an ignore decision for invisible (`isVisibleToUser == false`) nodes, partial-word substrings (`"unsponsored"`), or blank inputs.
-- [ ] AC-3 — Given a window containing a sponsored keyword (`"Sponsored"` / `"Sponsorlu"`) where the only `"Reels"` node is an unselected navigation tab (`isSelected == false`) or where no Reels viewer context indicator (`isSelected == true` `"Reels"` tab, `"Reels"` viewer header, or `"Reel by …"` description) is present, the system returns an ignore decision and dispatches no gesture (`INV-2`).
-- [ ] AC-4 — Given a `Sponsored Reel` is detected, the system throttles rapid event evaluations (`150 ms`), waits the `400 ms` `Skip Delay` before dispatching at most one `Swipe Gesture`, and cancels the pending gesture without swiping if a re-evaluation during the `400 ms` window shows the sponsored label or Reels context is no longer present.
-- [ ] AC-5 — Given a `Swipe Gesture` has been dispatched, any subsequent `Sponsored Reel` detections within the `1200 ms` `Cooldown Window` are suppressed, and detection resumes once `1200 ms` have elapsed.
-- [ ] AC-6 — Given a confirmed skip trigger and valid screen dimensions, the service dispatches an upward vertical swipe (`X = 50%` width, `Y = 75%` to `20%` height, `200 ms` duration), bounds node traversal to at most `500` visible nodes per snapshot, and recovers silently without crashing when the root window is null, bounds are invalid, or gesture dispatch returns false/cancelled.
-- [ ] AC-7 — All files under `com.adreels.skipper.domain` contain zero `android.*` imports, and neither `domain` nor `service` logs or persists inspected screen text (`INV-1`).
-- [ ] AC-8 — `./scripts/check` and `./scripts/check --fast` pass with exit code `0`.
+- [x] AC-1 — Given an accessibility event whose package name is null or not `"com.instagram.android"` (evaluated via `.toString()`, closing `B-3`), or when the `Master Toggle` state is `OFF`, the system ignores the event and dispatches no gesture.
+- [x] AC-2 — Given visible (`isVisibleToUser == true`) node texts or content descriptions within an active Reels viewer window, the `Ad Detector` returns a skip decision when any visible node matches `"Sponsored"`, `"Sponsorlu"`, or `"Paid partnership"` across word/phrase boundaries with Turkish/ASCII case-insensitive normalization (including uppercase `"SPONSORLU"` and surrounding punctuation such as `"• Sponsored •"`), and returns an ignore decision for invisible (`isVisibleToUser == false`) nodes, partial-word substrings (`"unsponsored"`), or blank inputs.
+- [x] AC-3 — Given a window containing a sponsored keyword (`"Sponsored"` / `"Sponsorlu"`) where the only `"Reels"` node is an unselected navigation tab (`isSelected == false`) or where no Reels viewer context indicator (`isSelected == true` `"Reels"` tab, `"Reels"` viewer header, or `"Reel by …"` description) is present, the system returns an ignore decision and dispatches no gesture (`INV-2`).
+- [x] AC-4 — Given a `Sponsored Reel` is detected, the system throttles rapid event evaluations (`150 ms`), waits the `400 ms` `Skip Delay` before dispatching at most one `Swipe Gesture`, and cancels the pending gesture without swiping if a re-evaluation during the `400 ms` window shows the sponsored label or Reels context is no longer present.
+- [x] AC-5 — Given a `Swipe Gesture` has been dispatched, any subsequent `Sponsored Reel` detections within the `1200 ms` `Cooldown Window` are suppressed, and detection resumes once `1200 ms` have elapsed.
+- [x] AC-6 — Given a confirmed skip trigger and valid screen dimensions, the service dispatches an upward vertical swipe (`X = 50%` width, `Y = 75%` to `20%` height, `200 ms` duration), bounds node traversal to at most `500` visible nodes per snapshot, and recovers silently without crashing when the root window is null, bounds are invalid, or gesture dispatch returns false/cancelled.
+- [x] AC-7 — All files under `com.adreels.skipper.domain` contain zero `android.*` imports, and neither `domain` nor `service` logs or persists inspected screen text (`INV-1`).
+- [x] AC-8 — `./scripts/check` and `./scripts/check --fast` pass with exit code `0`.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 |
+| Review findings: real / noise / deferred | 6 / 0 / 0 (review rounds 1–3; +2 real test hardenings at verify round 1) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
