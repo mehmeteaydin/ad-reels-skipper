@@ -2,4 +2,29 @@
 <resources>
     <string name="app_name">Ad Reels Skipper</string>
     <string name="accessibility_service_description">Automatically detects and skips sponsored Instagram Reels to protect your attention.</string>
+    <string name="dashboard_subtitle">On-device sponsored Instagram Reels skipper</string>
+    <string name="service_status_active">Service Active</string>
+    <string name="service_status_permission_required">Permission Required</string>
+    <string name="service_status_active_desc">Accessibility service is enabled and listening locally for sponsored Instagram Reels.</string>
+    <string name="service_status_disabled_desc">Enable Ad Reels Skipper in Android Accessibility Settings to skip sponsored Reels automatically.</string>
+    <string name="enable_accessibility_service">Enable Accessibility Service</string>
+    <string name="skipped_reels_label">Lifetime Skipped Reels</string>
+    <string name="master_toggle_label">Auto-Skip Sponsored Reels</string>
+    <string name="master_toggle_active_desc">Automatic skipping is active</string>
+    <string name="master_toggle_paused_desc">Skipping Paused</string>
+    <string name="skip_delay_label">Skip Delay</string>
+    <string name="skip_delay_value">%1$d ms</string>
+    <string name="skip_delay_range_hint">Adjustable from 100 ms to 2000 ms (50 ms steps)</string>
+    <string name="keywords_title">Ad Detection Keywords</string>
+    <string name="built_in_keywords_label">Built-in (read-only)</string>
+    <string name="custom_keywords_label">Custom Keywords</string>
+    <string name="custom_keywords_empty">No custom keywords added yet.</string>
+    <string name="keyword_input_label">Custom ad keyword</string>
+    <string name="add_keyword_button">Add Keyword</string>
+    <string name="remove_keyword_cd">Remove keyword %1$s</string>
+    <string name="error_keyword_blank">Enter a keyword before adding.</string>
+    <string name="error_keyword_too_short">Keyword must be at least 2 characters.</string>
+    <string name="error_keyword_too_long">Keyword must be 40 characters or fewer.</string>
+    <string name="error_keyword_no_alnum">Keyword must include at least one letter or digit.</string>
+    <string name="error_keyword_duplicate">Keyword already exists in active keywords.</string>
 </resources>

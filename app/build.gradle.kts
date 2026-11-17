@@ -113,4 +113,7 @@ tasks.withType<Test> {
         systemProperty("robolectric.offline", "true")
         systemProperty("robolectric.dependency.dir", sdkDir.absolutePath)
     }
+    System.getProperty("skipper.screenshot.dir")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { systemProperty("skipper.screenshot.dir", it) }
 }

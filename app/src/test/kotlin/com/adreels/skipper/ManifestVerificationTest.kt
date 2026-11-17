@@ -5,6 +5,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.w3c.dom.Document
 import org.w3c.dom.Element
@@ -68,6 +69,38 @@ class ManifestVerificationTest {
         )
     }
 
+    @Test
+    fun `manifest declares custom launcher icon and launcher activity intent filter`() {
+        val manifestDoc = parseXml(resolveAppFile("src/main/AndroidManifest.xml"))
+
+        val application = manifestDoc.getElementsByTagName("application").toElements().single()
+        assertEquals(CUSTOM_ICON_RESOURCE, application.androidAttr("icon"))
+        assertEquals(CUSTOM_ICON_RESOURCE, application.androidAttr("roundIcon"))
+        assertTrue(
+            resolveAppFile("src/main/res/drawable/ic_launcher.xml").exists(),
+            "Custom launcher vector drawable must exist",
+        )
+
+        val mainActivity = manifestDoc.getElementsByTagName("activity").toElements().firstOrNull {
+            it.androidAttr("name") == MAIN_ACTIVITY_CLASS
+        }
+        assertNotNull(mainActivity, "Manifest XML must declare <activity> $MAIN_ACTIVITY_CLASS")
+        assertEquals("true", mainActivity.androidAttr("exported"))
+
+        val intentFilters = mainActivity.getElementsByTagName("intent-filter").toElements()
+        assertTrue(intentFilters.isNotEmpty(), "$MAIN_ACTIVITY_CLASS must declare a launcher <intent-filter>")
+        val hasMainAction = intentFilters.any { filter ->
+            filter.getElementsByTagName("action").toElements()
+                .any { it.androidAttr("name") == ACTION_MAIN }
+        }
+        val hasLauncherCategory = intentFilters.any { filter ->
+            filter.getElementsByTagName("category").toElements()
+                .any { it.androidAttr("name") == CATEGORY_LAUNCHER }
+        }
+        assertTrue(hasMainAction, "$MAIN_ACTIVITY_CLASS <intent-filter> must declare $ACTION_MAIN")
+        assertTrue(hasLauncherCategory, "$MAIN_ACTIVITY_CLASS <intent-filter> must declare $CATEGORY_LAUNCHER")
+    }
+
     private fun resolveAppFile(appRelativePath: String): File {
         return listOf(
             File("app/$appRelativePath"),
@@ -97,5 +130,9 @@ class ManifestVerificationTest {
         const val ACCESSIBILITY_META_NAME = "android.accessibilityservice"
         const val ACCESSIBILITY_CONFIG_RESOURCE = "@xml/accessibility_service_config"
         const val TARGET_PACKAGE = "com.instagram.android"
+        const val CUSTOM_ICON_RESOURCE = "@drawable/ic_launcher"
+        const val MAIN_ACTIVITY_CLASS = ".MainActivity"
+        const val ACTION_MAIN = "android.intent.action.MAIN"
+        const val CATEGORY_LAUNCHER = "android.intent.category.LAUNCHER"
     }
 }
