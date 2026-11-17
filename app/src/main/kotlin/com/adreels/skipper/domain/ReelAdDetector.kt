@@ -223,6 +223,12 @@ class ReelAdDetector {
          * Normalizes [raw] into lowercase alphanumeric tokens separated by single spaces,
          * folding Turkish dotted/dotless `İ`/`I`/`ı`/`i` consistently across system locales.
          */
+        fun normalizeKeywordTokens(raw: String): String = normalizeTokens(raw)
+
+        /**
+         * Normalizes [raw] into lowercase alphanumeric tokens separated by single spaces,
+         * folding Turkish dotted/dotless `İ`/`I`/`ı`/`i` consistently across system locales.
+         */
         fun normalizeTokens(raw: String): String {
             if (raw.isBlank()) return ""
             val builder = StringBuilder(raw.length)

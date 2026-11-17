@@ -306,4 +306,61 @@ class ReelAdDetectorTest {
             detector.evaluate(adSnapshot, nowMs = 2_600L),
         )
     }
+
+    @Test
+    fun `clamps and snaps skip delay values to 100 through 2000 ms bounds`() {
+        assertEquals(100L, SkipperConfig.clampSkipDelay(0L))
+        assertEquals(100L, SkipperConfig.clampSkipDelay(100L))
+        assertEquals(650L, SkipperConfig.clampSkipDelay(650L))
+        assertEquals(2_000L, SkipperConfig.clampSkipDelay(2_000L))
+        assertEquals(2_000L, SkipperConfig.clampSkipDelay(5_000L))
+
+        assertEquals(100L, SkipperConfig.snapAndClampSkipDelay(25L))
+        assertEquals(100L, SkipperConfig.snapAndClampSkipDelay(124L))
+        assertEquals(150L, SkipperConfig.snapAndClampSkipDelay(125L))
+        assertEquals(400L, SkipperConfig.snapAndClampSkipDelay(400L))
+        assertEquals(2_000L, SkipperConfig.snapAndClampSkipDelay(2_400L))
+    }
+
+    @Test
+    fun `validates custom keywords with trim length bounds punctuation check and Turkish duplicate folding`() {
+        assertEquals(
+            KeywordValidationResult.Invalid(KeywordValidationError.BLANK),
+            KeywordValidator.validateCustomKeyword("   \n\t "),
+        )
+        assertEquals(
+            KeywordValidationResult.Invalid(KeywordValidationError.TOO_SHORT),
+            KeywordValidator.validateCustomKeyword(" a "),
+        )
+        assertEquals(
+            KeywordValidationResult.Invalid(KeywordValidationError.TOO_LONG),
+            KeywordValidator.validateCustomKeyword("x".repeat(41)),
+        )
+        assertEquals(
+            KeywordValidationResult.Invalid(KeywordValidationError.NO_ALPHANUMERIC),
+            KeywordValidator.validateCustomKeyword(" ••• "),
+        )
+
+        val builtInDup = KeywordValidator.validateCustomKeyword("sponsorlu")
+        assertEquals(KeywordValidationResult.Invalid(KeywordValidationError.DUPLICATE), builtInDup)
+
+        val turkishIWithDotDup = KeywordValidator.validateCustomKeyword("PAİD PARTNERSHİP")
+        assertEquals(KeywordValidationResult.Invalid(KeywordValidationError.DUPLICATE), turkishIWithDotDup)
+
+        val customDup = KeywordValidator.validateCustomKeyword(
+            raw = "  işbirliği  ",
+            existingCustomKeywords = setOf("İşbirliği"),
+        )
+        assertEquals(KeywordValidationResult.Invalid(KeywordValidationError.DUPLICATE), customDup)
+
+        val minBoundary = KeywordValidator.validateCustomKeyword("  Ad  ")
+        assertEquals(KeywordValidationResult.Valid("Ad"), minBoundary)
+
+        val maxBoundary = "r".repeat(40)
+        assertEquals(KeywordValidationResult.Valid(maxBoundary), KeywordValidator.validateCustomKeyword(maxBoundary))
+
+        assertTrue(KeywordValidator.isBuiltInKeyword("SPONSORED"))
+        assertTrue(KeywordValidator.isBuiltInKeyword("Sponsorlu"))
+        assertFalse(KeywordValidator.isBuiltInKeyword("Reklam"))
+    }
 }

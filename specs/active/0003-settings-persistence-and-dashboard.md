@@ -1,6 +1,6 @@
 # Spec 0003 — Settings Persistence and Dashboard UI
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0003-plan.md`
 - Self-critique: done
