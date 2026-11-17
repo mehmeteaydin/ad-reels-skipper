@@ -1,3 +1,5 @@
+import java.nio.file.Files
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -76,6 +78,35 @@ dependencies {
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
 }
 
+val robolectricSdkJars = listOf(
+    "org.robolectric:android-all-instrumented:15-robolectric-12650502-i7",
+    "org.robolectric:android-all-instrumented:13-robolectric-9030017-i7",
+).map { coordinate ->
+    configurations.detachedConfiguration(dependencies.create(coordinate)).apply {
+        isTransitive = false
+    }
+}
+
+val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
+
 tasks.withType<Test> {
     useJUnitPlatform()
+    robolectricSdkJars.forEach { inputs.files(it) }
+    doFirst {
+        val sdkDir = robolectricSdkDir.get().asFile
+        sdkDir.mkdirs()
+        robolectricSdkJars.flatMap { it.files }.forEach { jarFile ->
+            val target = sdkDir.resolve(jarFile.name)
+            if (!target.exists()) {
+                Files.deleteIfExists(target.toPath())
+                try {
+                    Files.createSymbolicLink(target.toPath(), jarFile.toPath())
+                } catch (_: Exception) {
+                    jarFile.copyTo(target, overwrite = true)
+                }
+            }
+        }
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", sdkDir.absolutePath)
+    }
 }
