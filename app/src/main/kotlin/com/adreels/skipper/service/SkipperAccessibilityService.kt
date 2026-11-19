@@ -15,6 +15,7 @@ import com.adreels.skipper.domain.ReelAdDetector
 import com.adreels.skipper.domain.SkipDecision
 import com.adreels.skipper.domain.SkipperConfig
 import com.adreels.skipper.domain.WindowSnapshot
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -204,6 +205,8 @@ class SkipperAccessibilityService : AccessibilityService() {
                 settingsRepositoryProvider().incrementSkippedReelsCount()
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (_: IOException) {
+                Log.w(TAG, "Failed to persist completed skip count")
             } catch (_: RuntimeException) {
                 Log.w(TAG, "Failed to persist completed skip count")
             }

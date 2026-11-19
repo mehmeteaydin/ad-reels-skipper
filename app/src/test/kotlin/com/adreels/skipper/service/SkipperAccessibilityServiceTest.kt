@@ -10,6 +10,7 @@ import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
 import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -56,6 +57,7 @@ class SkipperAccessibilityServiceTest {
     private class FakeSkipperSettingsRepository : SkipperSettingsRepository {
         private val mutableSettings = MutableStateFlow(SkipperSettings())
         override val settingsFlow: StateFlow<SkipperSettings> = mutableSettings.asStateFlow()
+        var incrementException: Throwable? = null
 
         override suspend fun setMasterEnabled(enabled: Boolean) {
             mutableSettings.value = mutableSettings.value.copy(isMasterEnabled = enabled)
@@ -89,6 +91,7 @@ class SkipperAccessibilityServiceTest {
         }
 
         override suspend fun incrementSkippedReelsCount() {
+            incrementException?.let { throw it }
             mutableSettings.value = mutableSettings.value.copy(
                 skippedReelsCount = mutableSettings.value.skippedReelsCount + 1,
             )
@@ -544,6 +547,42 @@ class SkipperAccessibilityServiceTest {
         fakeClockMs += 650L
         scheduler.firePending()
         assertEquals(2, shadowService.gesturesDispatched.size)
+        assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+    }
+
+    @Test
+    fun `survives IOException when persisting completed skip count`() = runBlocking {
+        settingsRepository.incrementException = IOException("Simulated disk full")
+        service.activeRootProvider = {
+            treeWith(
+                node(text = "Reels", selected = true, clickable = true),
+                node(text = "Sponsored"),
+            )
+        }
+
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 400L
+        scheduler.firePending()
+
+        val shadowService = Shadows.shadowOf(service as AccessibilityService)
+        assertEquals(1, shadowService.gesturesDispatched.size)
+        val firstGesture = shadowService.gesturesDispatched[0]
+        firstGesture.callback()?.onCompleted(firstGesture.description())
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0, settingsRepository.settingsFlow.value.skippedReelsCount)
+
+        // Clear simulated I/O error and verify service still processes subsequent sponsored reels.
+        settingsRepository.incrementException = null
+        fakeClockMs += 1_200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 400L
+        scheduler.firePending()
+        assertEquals(2, shadowService.gesturesDispatched.size)
+        val secondGesture = shadowService.gesturesDispatched[1]
+        secondGesture.callback()?.onCompleted(secondGesture.description())
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
     }
 }

@@ -7,6 +7,8 @@ import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.domain.KeywordValidationError
 import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.SkipperConfig
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,7 +67,7 @@ class DashboardViewModel(
     /** Toggles automatic ad skipping (`BR-2`) and persists the updated state locally. */
     fun setMasterEnabled(enabled: Boolean) {
         _uiState.update { it.copy(isMasterEnabled = enabled) }
-        viewModelScope.launch {
+        launchPersistence {
             repository.setMasterEnabled(enabled)
         }
     }
@@ -74,7 +76,7 @@ class DashboardViewModel(
     fun setSkipDelayMs(delayMs: Long) {
         val snapped = SkipperConfig.snapAndClampSkipDelay(delayMs)
         _uiState.update { it.copy(skipDelayMs = snapped) }
-        viewModelScope.launch {
+        launchPersistence {
             repository.setSkipDelayMs(snapped)
         }
     }
@@ -93,7 +95,7 @@ class DashboardViewModel(
     /** Validates and saves the current [DashboardUiState.keywordInput] (`BR-6`, `S-4`). */
     fun submitKeyword() {
         val candidate = _uiState.value.keywordInput
-        viewModelScope.launch {
+        launchPersistence {
             when (val result = repository.addCustomKeyword(candidate)) {
                 is KeywordValidationResult.Valid -> {
                     _uiState.update {
@@ -113,8 +115,22 @@ class DashboardViewModel(
 
     /** Deletes a user-added custom keyword while preserving built-in defaults (`AC-2`). */
     fun removeCustomKeyword(keyword: String) {
-        viewModelScope.launch {
+        launchPersistence {
             repository.removeCustomKeyword(keyword)
+        }
+    }
+
+    private fun launchPersistence(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IOException) {
+                // Preserve current in-memory UI state when disk write fails.
+            } catch (_: RuntimeException) {
+                // Preserve current in-memory UI state when unexpected persistence failure occurs.
+            }
         }
     }
 

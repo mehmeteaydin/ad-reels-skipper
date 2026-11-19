@@ -43,6 +43,7 @@
 - **rootInActiveWindow ownership & SDK test coverage**: Recycle the root node obtained from `rootInActiveWindow` on API < 34 in addition to child nodes, and exercise Robolectric service tests on both API <= 33 and API 34+ because `recycle()` paths are skipped on SDK 34+.
 - **Event flooding**: `AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED` triggers rapidly during scroll animations. Node analysis must be debounced / throttled to preserve CPU and battery.
 - **Async dispatchGesture in-flight window**: `AccessibilityService.dispatchGesture` executes over its stroke duration (200 ms) before invoking `onCompleted`/`onCancelled` while scroll events continue arriving; guard the in-flight window so mid-swipe events cannot arm a second skip that bypasses cooldown.
+- **Kotlin `catch (RuntimeException)` misses DataStore `IOException`**: Kotlin erases checked-exception visibility, and `java.io.IOException` extends `Exception` rather than `RuntimeException`; fire-and-forget `launch` blocks wrapping `DataStore.edit` or I/O calls must explicitly catch `IOException` (after rethrowing `CancellationException`) to stay crash-free.
 - **Instagram view ID volatility**: Never bind detection rules to internal view IDs (e.g. `R.id.text_view`), as Instagram obfuscates and changes them with each release. Rely solely on visible text, content descriptions, and semantic node structure.
 
 ## Enforced by tooling
