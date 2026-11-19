@@ -254,11 +254,23 @@ class HomeScreenTest {
 
         captureStateScreenshotIfRequested("S-4-invalid-keyword.png")
 
-        // Submit too-short and punctuation-only inputs.
+        // Submit blank, too-short, too-long, and punctuation-only inputs.
+        composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextClearance()
+        composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextInput("   ")
+        composeTestRule.onNodeWithTag(DashboardTags.ADD_KEYWORD_BUTTON).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Enter a keyword before adding.").performScrollTo().assertIsDisplayed()
+        assertTrue(fakeRepository.settingsFlow.value.customKeywords.isEmpty())
+
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextClearance()
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextInput("a")
         composeTestRule.onNodeWithTag(DashboardTags.ADD_KEYWORD_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithText("Keyword must be at least 2 characters.").performScrollTo().assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextClearance()
+        composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextInput("x".repeat(41))
+        composeTestRule.onNodeWithTag(DashboardTags.ADD_KEYWORD_BUTTON).performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Keyword must be 40 characters or fewer.").performScrollTo().assertIsDisplayed()
+        assertTrue(fakeRepository.settingsFlow.value.customKeywords.isEmpty())
 
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextClearance()
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT).performTextInput("•••")
