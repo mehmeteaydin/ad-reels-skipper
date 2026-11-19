@@ -3,6 +3,7 @@ package com.adreels.skipper.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -21,6 +22,7 @@ import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +30,8 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Persisted user preferences and lifetime skip metrics (`BR-2`, `BR-5`, `BR-6`, `BR-7`). */
 data class SkipperSettings(
@@ -78,66 +82,57 @@ class DataStoreSkipperSettingsRepository(
     private val _settingsFlow = MutableStateFlow(SkipperSettings())
     override val settingsFlow: StateFlow<SkipperSettings> = _settingsFlow.asStateFlow()
 
+    private val mutationMutex = Mutex()
+    private val stateLock = Any()
+    private var mutationCount: Long = 0L
+
     init {
         scope.launch {
-            dataStore.data
-                .catch { exception ->
-                    if (exception is IOException) {
-                        emit(emptyPreferences())
-                    } else {
-                        throw exception
+            safeSettingsFlow().collect { settings ->
+                synchronized(stateLock) {
+                    if (mutationCount == 0L) {
+                        _settingsFlow.value = settings
                     }
                 }
-                .map(::mapPreferences)
-                .collect { settings ->
-                    _settingsFlow.value = settings
-                }
+            }
         }
     }
 
     /** Suspends until the backing [DataStore] finishes its initial disk load and emits settings. */
     suspend fun awaitInitialLoad(): SkipperSettings {
-        val loaded = dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
+        return mutationMutex.withLock {
+            val loaded = safeSettingsFlow().first()
+            synchronized(stateLock) {
+                if (mutationCount == 0L) {
+                    _settingsFlow.value = loaded
                 }
+                _settingsFlow.value
             }
-            .map(::mapPreferences)
-            .first()
-        _settingsFlow.value = loaded
-        return loaded
+        }
     }
 
     override suspend fun setMasterEnabled(enabled: Boolean) {
-        val updated = dataStore.edit { prefs ->
+        mutatePreferences { prefs ->
             prefs[MASTER_ENABLED_KEY] = enabled
         }
-        _settingsFlow.value = mapPreferences(updated)
     }
 
     override suspend fun setSkipDelayMs(delayMs: Long) {
         val clamped = SkipperConfig.clampSkipDelay(delayMs)
-        val updated = dataStore.edit { prefs ->
+        mutatePreferences { prefs ->
             prefs[SKIP_DELAY_MS_KEY] = clamped
         }
-        _settingsFlow.value = mapPreferences(updated)
     }
 
     override suspend fun addCustomKeyword(rawKeyword: String): KeywordValidationResult {
-        lateinit var validationResult: KeywordValidationResult
-        val updated = dataStore.edit { prefs ->
+        return mutatePreferences { prefs ->
             val current = sanitizeCustomKeywords(prefs[CUSTOM_KEYWORDS_KEY].orEmpty())
             val result = KeywordValidator.validateCustomKeyword(rawKeyword, current)
-            validationResult = result
             if (result is KeywordValidationResult.Valid) {
                 prefs[CUSTOM_KEYWORDS_KEY] = current + result.trimmedKeyword
             }
+            result
         }
-        _settingsFlow.value = mapPreferences(updated)
-        return validationResult
     }
 
     override suspend fun removeCustomKeyword(keyword: String): Boolean {
@@ -145,9 +140,9 @@ class DataStoreSkipperSettingsRepository(
             return false
         }
         val targetNormalized = ReelAdDetector.normalizeKeywordTokens(keyword)
-        var removed = false
-        val updated = dataStore.edit { prefs ->
+        return mutatePreferences { prefs ->
             val current = sanitizeCustomKeywords(prefs[CUSTOM_KEYWORDS_KEY].orEmpty())
+            var removed = false
             val remaining = current.filterNot { existing ->
                 val matches = existing == keyword ||
                     (targetNormalized.isNotEmpty() &&
@@ -158,17 +153,46 @@ class DataStoreSkipperSettingsRepository(
             if (removed) {
                 prefs[CUSTOM_KEYWORDS_KEY] = remaining
             }
+            removed
         }
-        _settingsFlow.value = mapPreferences(updated)
-        return removed
     }
 
     override suspend fun incrementSkippedReelsCount() {
-        val updated = dataStore.edit { prefs ->
+        mutatePreferences { prefs ->
             val current = (prefs[SKIPPED_REELS_COUNT_KEY] ?: 0).coerceAtLeast(0)
             prefs[SKIPPED_REELS_COUNT_KEY] = current + 1
         }
-        _settingsFlow.value = mapPreferences(updated)
+    }
+
+    private fun safeSettingsFlow(): Flow<SkipperSettings> {
+        return dataStore.data
+            .catch { exception ->
+                if (exception is IOException) {
+                    emit(emptyPreferences())
+                } else {
+                    throw exception
+                }
+            }
+            .map(::mapPreferences)
+    }
+
+    private suspend fun <T> mutatePreferences(
+        transform: (MutablePreferences) -> T,
+    ): T {
+        return mutationMutex.withLock {
+            synchronized(stateLock) {
+                mutationCount++
+            }
+            var result: T? = null
+            val updated = dataStore.edit { prefs ->
+                result = transform(prefs)
+            }
+            synchronized(stateLock) {
+                _settingsFlow.value = mapPreferences(updated)
+            }
+            @Suppress("UNCHECKED_CAST")
+            result as T
+        }
     }
 
     private fun mapPreferences(prefs: Preferences): SkipperSettings {

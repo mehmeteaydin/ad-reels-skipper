@@ -12,7 +12,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -115,6 +118,56 @@ class SkipperSettingsRepositoryTest {
 
             repo.setSkipDelayMs(600L)
             assertEquals(600L, repo.settingsFlow.value.skipDelayMs)
+        } finally {
+            scope.cancel()
+            scope.coroutineContext[Job]?.join()
+        }
+    }
+
+    @Test
+    fun `serializes concurrent mutations without stale settingsFlow regressions`() = runBlocking {
+        val storeFile = File(tempDir.toFile(), "concurrent_settings.preferences_pb")
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val observedCounts = mutableListOf<Int>()
+        val lock = Any()
+
+        try {
+            val repo = DataStoreSkipperSettingsRepository(
+                dataStore = DataStoreSkipperSettingsRepository.createDataStore(scope) { storeFile },
+                scope = scope,
+            )
+            val collectorJob = launch(Dispatchers.Unconfined) {
+                repo.settingsFlow.collect { settings ->
+                    synchronized(lock) {
+                        observedCounts.add(settings.skippedReelsCount)
+                    }
+                }
+            }
+
+            try {
+                val jobs = (1..20).map {
+                    async(Dispatchers.Default) {
+                        repo.incrementSkippedReelsCount()
+                    }
+                } + listOf(
+                    async(Dispatchers.Default) { repo.setMasterEnabled(false) },
+                    async(Dispatchers.Default) { repo.setSkipDelayMs(900L) },
+                )
+                jobs.awaitAll()
+            } finally {
+                collectorJob.cancel()
+            }
+
+            val snapshotCounts = synchronized(lock) { observedCounts.toList() }
+            for (index in 1 until snapshotCounts.size) {
+                assertTrue(
+                    snapshotCounts[index] >= snapshotCounts[index - 1],
+                    "settingsFlow count regressed in $snapshotCounts",
+                )
+            }
+            assertEquals(20, repo.settingsFlow.value.skippedReelsCount)
+            assertFalse(repo.settingsFlow.value.isMasterEnabled)
+            assertEquals(900L, repo.settingsFlow.value.skipDelayMs)
         } finally {
             scope.cancel()
             scope.coroutineContext[Job]?.join()
