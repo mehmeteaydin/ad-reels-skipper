@@ -67,6 +67,7 @@ internal object DashboardTags {
  */
 @Composable
 fun HomeScreen(
+    modifier: Modifier = Modifier,
     uiState: DashboardUiState = DashboardUiState(),
     onOpenAccessibilitySettings: () -> Unit = {},
     onToggleMaster: (Boolean) -> Unit = {},
@@ -74,7 +75,6 @@ fun HomeScreen(
     onKeywordInputChange: (String) -> Unit = {},
     onAddKeyword: () -> Unit = {},
     onRemoveKeyword: (String) -> Unit = {},
-    modifier: Modifier = Modifier,
 ) {
     SkipperTheme {
         Scaffold(
