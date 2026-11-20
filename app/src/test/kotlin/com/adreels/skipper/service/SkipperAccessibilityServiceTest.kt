@@ -11,6 +11,7 @@ import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
 import java.io.IOException
+import java.util.Collections
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -552,37 +553,60 @@ class SkipperAccessibilityServiceTest {
 
     @Test
     fun `survives IOException when persisting completed skip count`() = runBlocking {
-        settingsRepository.incrementException = IOException("Simulated disk full")
-        service.activeRootProvider = {
-            treeWith(
-                node(text = "Reels", selected = true, clickable = true),
-                node(text = "Sponsored"),
-            )
+        val uncaughtExceptions = Collections.synchronizedList(mutableListOf<Throwable>())
+        val currentThread = Thread.currentThread()
+        val previousThreadHandler = currentThread.uncaughtExceptionHandler
+        val previousDefaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        val recordingHandler = Thread.UncaughtExceptionHandler { _, throwable ->
+            uncaughtExceptions.add(throwable)
         }
+        currentThread.uncaughtExceptionHandler = recordingHandler
+        Thread.setDefaultUncaughtExceptionHandler(recordingHandler)
 
-        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
-        assertNotNull(scheduler.pendingAction)
-        fakeClockMs += 400L
-        scheduler.firePending()
+        try {
+            settingsRepository.incrementException = IOException("Simulated disk full")
+            service.activeRootProvider = {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Sponsored"),
+                )
+            }
 
-        val shadowService = Shadows.shadowOf(service as AccessibilityService)
-        assertEquals(1, shadowService.gesturesDispatched.size)
-        val firstGesture = shadowService.gesturesDispatched[0]
-        firstGesture.callback()?.onCompleted(firstGesture.description())
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        assertEquals(0, settingsRepository.settingsFlow.value.skippedReelsCount)
+            service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+            assertNotNull(scheduler.pendingAction)
+            fakeClockMs += 400L
+            scheduler.firePending()
 
-        // Clear simulated I/O error and verify service still processes subsequent sponsored reels.
-        settingsRepository.incrementException = null
-        fakeClockMs += 1_200L
-        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
-        assertNotNull(scheduler.pendingAction)
-        fakeClockMs += 400L
-        scheduler.firePending()
-        assertEquals(2, shadowService.gesturesDispatched.size)
-        val secondGesture = shadowService.gesturesDispatched[1]
-        secondGesture.callback()?.onCompleted(secondGesture.description())
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+            val shadowService = Shadows.shadowOf(service as AccessibilityService)
+            assertEquals(1, shadowService.gesturesDispatched.size)
+            val firstGesture = shadowService.gesturesDispatched[0]
+            firstGesture.callback()?.onCompleted(firstGesture.description())
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertTrue(
+                uncaughtExceptions.isEmpty(),
+                "Expected IOException to be caught inside serviceScope, but got uncaught: $uncaughtExceptions",
+            )
+            assertEquals(0, settingsRepository.settingsFlow.value.skippedReelsCount)
+
+            // Clear simulated I/O error and verify service still processes subsequent sponsored reels.
+            settingsRepository.incrementException = null
+            fakeClockMs += 1_200L
+            service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+            assertNotNull(scheduler.pendingAction)
+            fakeClockMs += 400L
+            scheduler.firePending()
+            assertEquals(2, shadowService.gesturesDispatched.size)
+            val secondGesture = shadowService.gesturesDispatched[1]
+            secondGesture.callback()?.onCompleted(secondGesture.description())
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertTrue(
+                uncaughtExceptions.isEmpty(),
+                "Expected zero uncaught exceptions after recovery, but got: $uncaughtExceptions",
+            )
+            assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+        } finally {
+            currentThread.uncaughtExceptionHandler = previousThreadHandler
+            Thread.setDefaultUncaughtExceptionHandler(previousDefaultHandler)
+        }
     }
 }
