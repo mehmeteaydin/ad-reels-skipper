@@ -1,6 +1,6 @@
 # Spec 0003 — Settings Persistence and Dashboard UI
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0003-plan.md`
 - Self-critique: done
@@ -46,27 +46,27 @@ Instagram users want direct control over how `ad-reels-skipper` detects and skip
   - `B-2` (Ktlint/Detekt & `allWarningsAsErrors`) and `B-5` (CI workflow token/cache hardening), which remain in `specs/backlog.md`.
 
 ## Acceptance criteria
-- [ ] AC-1 — Given no prior saved settings (or corrupted local storage), the system initializes with default values (`Master Toggle = ON`, `Skip Delay = 400 ms`, built-in keywords `Sponsored`, `Sponsorlu`, `Paid partnership`, `Skipped Reels = 0`), persists user updates across restarts, clamps `Skip Delay` values outside `100..2000 ms` to the nearest bound (`100 ms` or `2000 ms`), and increments the persisted lifetime skip counter by `1` per completed skip (`BR-2`, `BR-5`, `BR-6`, `BR-7`).
-- [ ] AC-2 — Given custom keyword operations, the system trims surrounding whitespace, adds valid custom keywords (`2..40` characters containing at least one letter or digit) in union with the built-in keywords, rejects blank, punctuation-only, `< 2` character, `> 40` character, or Turkish/ASCII case-insensitive duplicate keywords (`"sponsorlu"`, `"SPONSORED"`, or an existing custom keyword) without mutating the saved set, and allows removing only user-added custom keywords while keeping built-in keywords undeletable (`BR-6`).
-- [ ] AC-3 — Given the `AccessibilityService` is running, it observes the persisted configuration (`Master Toggle`, `Skip Delay`, and unioned keyword set) dynamically so toggling `Master Toggle` to `OFF` immediately suppresses detection/swiping, updating `Skip Delay` or custom keywords changes detection/schedule timing without restarting the app, and only a completed upward swipe (`onCompleted`) increments the lifetime skip counter by `1` (cancelled, aborted, or failed swipes do not increment the counter) (`BR-2`, `BR-5`, `BR-6`, `BR-7`).
-- [ ] AC-4 — Given state `S-1` (`Permission Required`), when the accessibility service is not enabled in Android system settings, the dashboard renders the permission-required warning card with the `"Enable Accessibility Service"` action (which dispatches the `android.settings.ACCESSIBILITY_SETTINGS` intent when tapped), refreshes the permission state on activity resume, and displays the default controls (`Master Toggle = ON`, `"400 ms"`, built-in keywords, `Skipped Reels = 0`), verified by component test and headless screenshot `S-1` (`B-6`).
-- [ ] AC-5 — Given states `S-2` (`Service Active — Master Toggle ON`) and `S-3` (`Paused — Master Toggle OFF`), when the accessibility service is enabled, the dashboard renders `"Service Active"`, reflects live `Skipped Reels` count, `Skip Delay` slider changes (`50 ms` steps in `100..2000 ms`), and custom keyword additions/removals (`S-2`), and transitions to the paused indicator when `Master Toggle` is switched `OFF` while preserving all configured values (`S-3`), verified by component tests and headless screenshots `S-2` and `S-3` (`B-6`).
-- [ ] AC-6 — Given state `S-4` (`Invalid Keyword Input`), when the user submits a blank, too-short (`< 2` chars), too-long (`> 40` chars), punctuation-only, or duplicate keyword on the dashboard, an inline validation error message is displayed, the keyword list is unchanged, and a subsequent valid keyword submission clears the error and adds the keyword, verified by component test and headless screenshot `S-4` (`B-6`).
-- [ ] AC-7 — `com.adreels.skipper.domain` contains zero `android.*` imports, `com.adreels.skipper.ui` never references `AccessibilityService` or dispatches gestures directly, no package imports networking APIs (`INV-1`), and `AndroidManifest.xml` declares a custom launcher icon (`B-1`) and verified `MAIN`/`LAUNCHER` `<intent-filter>` with Material 3 theming and localized string resources (`B-4`).
-- [ ] AC-8 — `./scripts/check` and `./scripts/check --fast` pass with exit code `0`.
+- [x] AC-1 — Given no prior saved settings (or corrupted local storage), the system initializes with default values (`Master Toggle = ON`, `Skip Delay = 400 ms`, built-in keywords `Sponsored`, `Sponsorlu`, `Paid partnership`, `Skipped Reels = 0`), persists user updates across restarts, clamps `Skip Delay` values outside `100..2000 ms` to the nearest bound (`100 ms` or `2000 ms`), and increments the persisted lifetime skip counter by `1` per completed skip (`BR-2`, `BR-5`, `BR-6`, `BR-7`).
+- [x] AC-2 — Given custom keyword operations, the system trims surrounding whitespace, adds valid custom keywords (`2..40` characters containing at least one letter or digit) in union with the built-in keywords, rejects blank, punctuation-only, `< 2` character, `> 40` character, or Turkish/ASCII case-insensitive duplicate keywords (`"sponsorlu"`, `"SPONSORED"`, or an existing custom keyword) without mutating the saved set, and allows removing only user-added custom keywords while keeping built-in keywords undeletable (`BR-6`).
+- [x] AC-3 — Given the `AccessibilityService` is running, it observes the persisted configuration (`Master Toggle`, `Skip Delay`, and unioned keyword set) dynamically so toggling `Master Toggle` to `OFF` immediately suppresses detection/swiping, updating `Skip Delay` or custom keywords changes detection/schedule timing without restarting the app, and only a completed upward swipe (`onCompleted`) increments the lifetime skip counter by `1` (cancelled, aborted, or failed swipes do not increment the counter) (`BR-2`, `BR-5`, `BR-6`, `BR-7`).
+- [x] AC-4 — Given state `S-1` (`Permission Required`), when the accessibility service is not enabled in Android system settings, the dashboard renders the permission-required warning card with the `"Enable Accessibility Service"` action (which dispatches the `android.settings.ACCESSIBILITY_SETTINGS` intent when tapped), refreshes the permission state on activity resume, and displays the default controls (`Master Toggle = ON`, `"400 ms"`, built-in keywords, `Skipped Reels = 0`), verified by component test and headless screenshot `S-1` (`B-6`).
+- [x] AC-5 — Given states `S-2` (`Service Active — Master Toggle ON`) and `S-3` (`Paused — Master Toggle OFF`), when the accessibility service is enabled, the dashboard renders `"Service Active"`, reflects live `Skipped Reels` count, `Skip Delay` slider changes (`50 ms` steps in `100..2000 ms`), and custom keyword additions/removals (`S-2`), and transitions to the paused indicator when `Master Toggle` is switched `OFF` while preserving all configured values (`S-3`), verified by component tests and headless screenshots `S-2` and `S-3` (`B-6`).
+- [x] AC-6 — Given state `S-4` (`Invalid Keyword Input`), when the user submits a blank, too-short (`< 2` chars), too-long (`> 40` chars), punctuation-only, or duplicate keyword on the dashboard, an inline validation error message is displayed, the keyword list is unchanged, and a subsequent valid keyword submission clears the error and adds the keyword, verified by component test and headless screenshot `S-4` (`B-6`).
+- [x] AC-7 — `com.adreels.skipper.domain` contains zero `android.*` imports, `com.adreels.skipper.ui` never references `AccessibilityService` or dispatches gestures directly, no package imports networking APIs (`INV-1`), and `AndroidManifest.xml` declares a custom launcher icon (`B-1`) and verified `MAIN`/`LAUNCHER` `<intent-filter>` with Material 3 theming and localized string resources (`B-4`).
+- [x] AC-8 — `./scripts/check` and `./scripts/check --fast` pass with exit code `0`.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 2 |
+| Review findings: real / noise / deferred | 6 / 0 / 0 (review rounds 1–3; +1 real test hardening at verify round 1) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
