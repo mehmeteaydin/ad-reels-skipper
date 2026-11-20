@@ -9,10 +9,21 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.adreels.skipper.data.SkipperSettingsRepository
+import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
 import com.adreels.skipper.domain.ReelAdDetector
 import com.adreels.skipper.domain.SkipDecision
 import com.adreels.skipper.domain.SkipperConfig
 import com.adreels.skipper.domain.WindowSnapshot
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /** Scheduler abstraction enabling deterministic delayed skip testing without thread sleeps. */
 interface DelayScheduler {
@@ -51,11 +62,58 @@ class SkipperAccessibilityService : AccessibilityService() {
     internal var detector: ReelAdDetector = ReelAdDetector()
     internal var treeExtractor: AccessibilityTreeExtractor = AccessibilityTreeExtractor()
     internal var gestureDispatcher: SwipeGestureDispatcher = SwipeGestureDispatcher()
-    internal var configProvider: () -> SkipperConfig = { SkipperConfig() }
+    internal var settingsRepositoryProvider: () -> SkipperSettingsRepository = {
+        SkipperSettingsRepositoryProvider.get(applicationContext)
+    }
+    internal var callbackDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate
+    internal var configProvider: () -> SkipperConfig = {
+        settingsRepositoryProvider().settingsFlow.value.toSkipperConfig()
+    }
     internal var activeRootProvider: () -> AccessibilityNodeInfo? = { rootInActiveWindow }
     internal var displayBoundsProvider: () -> Pair<Int, Int> = {
         val metrics = resources.displayMetrics
         metrics.widthPixels to metrics.heightPixels
+    }
+
+    private var serviceScope: CoroutineScope? = null
+    private var settingsObserverJob: Job? = null
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        startObservingSettings()
+    }
+
+    private fun cancelPendingSkipIfNeeded(
+        packageName: String?,
+        nowMs: Long,
+        config: SkipperConfig,
+    ) {
+        val decision = detector.evaluate(
+            snapshot = WindowSnapshot(packageName = packageName, nodes = emptyList()),
+            nowMs = nowMs,
+            config = config,
+        )
+        if (decision is SkipDecision.CancelPendingSkip) {
+            delayScheduler.cancelAll()
+            Log.d(TAG, "Pending skip cancelled")
+        }
+    }
+
+    /** Begins collecting live user settings so toggle changes cancel pending skips promptly. */
+    internal fun startObservingSettings() {
+        settingsObserverJob?.cancel()
+        val scope = ensureServiceScope()
+        settingsObserverJob = scope.launch {
+            settingsRepositoryProvider().settingsFlow.collect { settings ->
+                if (!settings.isMasterEnabled) {
+                    cancelPendingSkipIfNeeded(
+                        packageName = TARGET_PACKAGE,
+                        nowMs = clockMs(),
+                        config = settings.toSkipperConfig(),
+                    )
+                }
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -65,15 +123,7 @@ class SkipperAccessibilityService : AccessibilityService() {
         val now = clockMs()
 
         if (!config.isMasterEnabled || packageName != TARGET_PACKAGE) {
-            val decision = detector.evaluate(
-                snapshot = WindowSnapshot(packageName = packageName, nodes = emptyList()),
-                nowMs = now,
-                config = config,
-            )
-            if (decision is SkipDecision.CancelPendingSkip) {
-                delayScheduler.cancelAll()
-                Log.d(TAG, "Pending skip cancelled")
-            }
+            cancelPendingSkipIfNeeded(packageName = packageName, nowMs = now, config = config)
             return
         }
 
@@ -138,6 +188,7 @@ class SkipperAccessibilityService : AccessibilityService() {
             onCompleted = {
                 delayScheduler.cancelAll()
                 detector.onSkipDispatched(clockMs())
+                recordCompletedSkip()
                 Log.d(TAG, "Swipe gesture completed")
             },
             onFailed = {
@@ -146,6 +197,26 @@ class SkipperAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "Swipe gesture failed or cancelled")
             },
         )
+    }
+
+    private fun recordCompletedSkip() {
+        ensureServiceScope().launch {
+            try {
+                settingsRepositoryProvider().incrementSkippedReelsCount()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: IOException) {
+                Log.w(TAG, "Failed to persist completed skip count")
+            } catch (_: RuntimeException) {
+                Log.w(TAG, "Failed to persist completed skip count")
+            }
+        }
+    }
+
+    private fun ensureServiceScope(): CoroutineScope {
+        return serviceScope ?: CoroutineScope(SupervisorJob() + callbackDispatcher).also { created ->
+            serviceScope = created
+        }
     }
 
     override fun onInterrupt() {
@@ -157,7 +228,22 @@ class SkipperAccessibilityService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         delayScheduler.cancelAll()
         detector.reset()
+        stopServiceScope()
         return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        delayScheduler.cancelAll()
+        detector.reset()
+        stopServiceScope()
+        super.onDestroy()
+    }
+
+    private fun stopServiceScope() {
+        settingsObserverJob?.cancel()
+        settingsObserverJob = null
+        serviceScope?.cancel()
+        serviceScope = null
     }
 
     private fun safeActiveRoot(): AccessibilityNodeInfo? {

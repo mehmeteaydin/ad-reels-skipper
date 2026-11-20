@@ -59,4 +59,55 @@ class DomainArchitectureTest {
             }
         }
     }
+
+    @Test
+    fun `ui package never references AccessibilityService or gesture dispatch APIs`() {
+        val uiDir = resolveSourceDir("src/main/kotlin/com/adreels/skipper/ui")
+        val kotlinFiles = uiDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        assertTrue(kotlinFiles.isNotEmpty(), "Expected Kotlin files in ui package")
+
+        val forbiddenUiPatterns = listOf(
+            "AccessibilityService",
+            "SkipperAccessibilityService",
+            "GestureDescription",
+            "dispatchGesture",
+        )
+
+        for (file in kotlinFiles) {
+            val content = file.readText()
+            for (forbidden in forbiddenUiPatterns) {
+                assertFalse(
+                    content.contains(forbidden),
+                    "${file.name} in ui package must not reference $forbidden",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `no application package imports networking libraries`() {
+        val srcRoot = resolveSourceDir("src/main/kotlin/com/adreels/skipper")
+        val kotlinFiles = srcRoot.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+        assertTrue(kotlinFiles.isNotEmpty(), "Expected Kotlin files in main source tree")
+
+        val forbiddenNetworkImports = listOf(
+            "import java.net.",
+            "import javax.net.",
+            "import okhttp3.",
+            "import retrofit2.",
+            "import io.ktor.",
+            "import android.net.http.",
+            "import android.webkit.",
+        )
+
+        for (file in kotlinFiles) {
+            val networkImports = file.readLines()
+                .map { it.trim() }
+                .filter { line -> forbiddenNetworkImports.any { prefix -> line.startsWith(prefix) } }
+            assertTrue(
+                networkImports.isEmpty(),
+                "${file.name} must not import networking APIs (INV-1): $networkImports",
+            )
+        }
+    }
 }

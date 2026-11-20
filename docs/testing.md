@@ -9,6 +9,8 @@
 
 ## Frameworks & layout
 - **JVM Unit Tests**: JUnit 5 (`org.junit.jupiter`) with `kotlin.test` assertions, located in `app/src/test/kotlin/`.
+- **Component & Service Tests (Robolectric)**: JUnit 4 (`AndroidJUnit4`) with Robolectric `4.14.1` and Jetpack Compose UI test rules for Activity, Service (`API <= 33` and `34+`), and Dashboard UI states. SDK jars are pre-resolved offline via Gradle (`app/build.gradle.kts`).
+- **Headless Screenshots**: Robolectric `@GraphicsMode(GraphicsMode.Mode.NATIVE)` renders Compose UI states (`S-1`…`S-n`) directly on JVM; when `VERIFY` passes `-Dskipper.screenshot.dir=/tmp/<dir>`, PNG captures are written strictly outside the repository (`B-6`).
 - **Mocking**: `mockk` or lightweight test doubles for repositories and timers.
 - **Naming**: Tests end in `Test.kt`. Test methods use backtick sentences describing expected behavior: ``fun `ignores event when master toggle is disabled`()``.
 

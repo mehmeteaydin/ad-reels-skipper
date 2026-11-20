@@ -4,12 +4,24 @@ import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.adreels.skipper.data.SkipperSettings
+import com.adreels.skipper.data.SkipperSettingsRepository
+import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
+import com.adreels.skipper.domain.KeywordValidationResult
+import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
+import java.io.IOException
+import java.util.Collections
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,19 +55,71 @@ class SkipperAccessibilityServiceTest {
         }
     }
 
+    private class FakeSkipperSettingsRepository : SkipperSettingsRepository {
+        private val mutableSettings = MutableStateFlow(SkipperSettings())
+        override val settingsFlow: StateFlow<SkipperSettings> = mutableSettings.asStateFlow()
+        var incrementException: Throwable? = null
+
+        override suspend fun setMasterEnabled(enabled: Boolean) {
+            mutableSettings.value = mutableSettings.value.copy(isMasterEnabled = enabled)
+        }
+
+        override suspend fun setSkipDelayMs(delayMs: Long) {
+            mutableSettings.value = mutableSettings.value.copy(
+                skipDelayMs = SkipperConfig.clampSkipDelay(delayMs),
+            )
+        }
+
+        override suspend fun addCustomKeyword(rawKeyword: String): KeywordValidationResult {
+            val result = KeywordValidator.validateCustomKeyword(
+                raw = rawKeyword,
+                existingCustomKeywords = mutableSettings.value.customKeywords,
+            )
+            if (result is KeywordValidationResult.Valid) {
+                mutableSettings.value = mutableSettings.value.copy(
+                    customKeywords = mutableSettings.value.customKeywords + result.trimmedKeyword,
+                )
+            }
+            return result
+        }
+
+        override suspend fun removeCustomKeyword(keyword: String): Boolean {
+            if (KeywordValidator.isBuiltInKeyword(keyword)) return false
+            val current = mutableSettings.value.customKeywords
+            val updated = current - keyword
+            mutableSettings.value = mutableSettings.value.copy(customKeywords = updated)
+            return updated.size != current.size
+        }
+
+        override suspend fun incrementSkippedReelsCount() {
+            incrementException?.let { throw it }
+            mutableSettings.value = mutableSettings.value.copy(
+                skippedReelsCount = mutableSettings.value.skippedReelsCount + 1,
+            )
+        }
+    }
+
     private lateinit var service: SkipperAccessibilityService
     private lateinit var scheduler: RecordingDelayScheduler
+    private lateinit var settingsRepository: FakeSkipperSettingsRepository
     private var fakeClockMs: Long = 1_000L
 
     @Before
     fun setUp() {
         fakeClockMs = 1_000L
         scheduler = RecordingDelayScheduler()
+        settingsRepository = FakeSkipperSettingsRepository()
+        SkipperSettingsRepositoryProvider.setForTesting(settingsRepository)
         service = Robolectric.setupService(SkipperAccessibilityService::class.java).apply {
             clockMs = { fakeClockMs }
             delayScheduler = scheduler
             displayBoundsProvider = { 1080 to 2400 }
         }
+    }
+
+    @After
+    fun tearDown() {
+        SkipperSettingsRepositoryProvider.setForTesting(null)
     }
 
     private fun instagramEvent(packageName: CharSequence?): AccessibilityEvent {
@@ -413,5 +477,136 @@ class SkipperAccessibilityServiceTest {
         fakeClockMs += 1_200L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
+    }
+
+    @Test
+    fun `observes live repository config updates and increments skip counter only on completed swipe`() = runBlocking {
+        service.startObservingSettings()
+
+        var phase = "custom_ad"
+        service.activeRootProvider = {
+            when (phase) {
+                "custom_ad" -> treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Reklam"),
+                )
+                else -> treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Organic content"),
+                )
+            }
+        }
+
+        // Default keywords do not match "Reklam" until the custom keyword is saved.
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNull(scheduler.pendingAction)
+
+        assertEquals(KeywordValidationResult.Valid("Reklam"), settingsRepository.addCustomKeyword("Reklam"))
+        settingsRepository.setSkipDelayMs(650L)
+
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        assertEquals(650L, scheduler.scheduledDelayMs)
+
+        // Turning Master Toggle OFF cancels pending skip immediately via Flow collection.
+        settingsRepository.setMasterEnabled(false)
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertNull(scheduler.pendingAction)
+
+        // Re-enable toggle and complete one upward swipe -> counter increments to 1.
+        settingsRepository.setMasterEnabled(true)
+        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+
+        fakeClockMs += 650L
+        scheduler.firePending()
+        val shadowService = Shadows.shadowOf(service as AccessibilityService)
+        assertEquals(1, shadowService.gesturesDispatched.size)
+        val firstGesture = shadowService.gesturesDispatched[0]
+        firstGesture.callback()?.onCompleted(firstGesture.description())
+        assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+
+        // Cancelled swipe by OS must NOT increment counter.
+        fakeClockMs += 1_200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 650L
+        scheduler.firePending()
+        assertEquals(2, shadowService.gesturesDispatched.size)
+        val cancelledGesture = shadowService.gesturesDispatched[1]
+        cancelledGesture.callback()?.onCancelled(cancelledGesture.description())
+        assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+
+        // Pre-dispatch abort when window becomes organic must NOT increment counter.
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "organic"
+        fakeClockMs += 650L
+        scheduler.firePending()
+        assertEquals(2, shadowService.gesturesDispatched.size)
+        assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+    }
+
+    @Test
+    fun `survives IOException when persisting completed skip count`() = runBlocking {
+        val uncaughtExceptions = Collections.synchronizedList(mutableListOf<Throwable>())
+        val currentThread = Thread.currentThread()
+        val previousThreadHandler = currentThread.uncaughtExceptionHandler
+        val previousDefaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        val recordingHandler = Thread.UncaughtExceptionHandler { _, throwable ->
+            uncaughtExceptions.add(throwable)
+        }
+        currentThread.uncaughtExceptionHandler = recordingHandler
+        Thread.setDefaultUncaughtExceptionHandler(recordingHandler)
+
+        try {
+            settingsRepository.incrementException = IOException("Simulated disk full")
+            service.activeRootProvider = {
+                treeWith(
+                    node(text = "Reels", selected = true, clickable = true),
+                    node(text = "Sponsored"),
+                )
+            }
+
+            service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+            assertNotNull(scheduler.pendingAction)
+            fakeClockMs += 400L
+            scheduler.firePending()
+
+            val shadowService = Shadows.shadowOf(service as AccessibilityService)
+            assertEquals(1, shadowService.gesturesDispatched.size)
+            val firstGesture = shadowService.gesturesDispatched[0]
+            firstGesture.callback()?.onCompleted(firstGesture.description())
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertTrue(
+                uncaughtExceptions.isEmpty(),
+                "Expected IOException to be caught inside serviceScope, but got uncaught: $uncaughtExceptions",
+            )
+            assertEquals(0, settingsRepository.settingsFlow.value.skippedReelsCount)
+
+            // Clear simulated I/O error and verify service still processes subsequent sponsored reels.
+            settingsRepository.incrementException = null
+            fakeClockMs += 1_200L
+            service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+            assertNotNull(scheduler.pendingAction)
+            fakeClockMs += 400L
+            scheduler.firePending()
+            assertEquals(2, shadowService.gesturesDispatched.size)
+            val secondGesture = shadowService.gesturesDispatched[1]
+            secondGesture.callback()?.onCompleted(secondGesture.description())
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertTrue(
+                uncaughtExceptions.isEmpty(),
+                "Expected zero uncaught exceptions after recovery, but got: $uncaughtExceptions",
+            )
+            assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+        } finally {
+            currentThread.uncaughtExceptionHandler = previousThreadHandler
+            Thread.setDefaultUncaughtExceptionHandler(previousDefaultHandler)
+        }
     }
 }
