@@ -193,6 +193,22 @@ class DomainArchitectureTest {
             assertTrue(taskBody.contains("outputs."), "$taskName task must declare Gradle outputs")
         }
 
+        val testTaskBlock = gradleBuild.substringAfter("tasks.withType<Test> {", missingDelimiterValue = "")
+            .substringBefore("\n}\n")
+        assertTrue(testTaskBlock.isNotBlank(), "tasks.withType<Test> block must exist in app/build.gradle.kts")
+        listOf(
+            "inputs.files(",
+            ".editorconfig",
+            "config/detekt/detekt.yml",
+            "scripts/check.conf",
+            ".github/workflows/check.yml",
+        ).forEach { expectedInput ->
+            assertTrue(
+                testTaskBlock.contains(expectedInput),
+                "tasks.withType<Test> must track $expectedInput as a Gradle input so contract tests re-run on change",
+            )
+        }
+
         val pluginsBlock = Regex("""plugins\s*\{(.*?)\}""", RegexOption.DOT_MATCHES_ALL)
             .find(gradleBuild)?.groupValues?.get(1)
             ?: error("plugins block must exist in app/build.gradle.kts")

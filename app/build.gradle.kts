@@ -97,6 +97,13 @@ val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
 tasks.withType<Test> {
     useJUnitPlatform()
     robolectricSdkJars.forEach { inputs.files(it) }
+    inputs.files(
+        layout.projectDirectory.file("build.gradle.kts"),
+        rootProject.file(".editorconfig"),
+        rootProject.file("config/detekt/detekt.yml"),
+        rootProject.file("scripts/check.conf"),
+        rootProject.file(".github/workflows/check.yml"),
+    )
     doFirst {
         val sdkDir = robolectricSdkDir.get().asFile
         sdkDir.mkdirs()
