@@ -31,9 +31,11 @@ complexity:
 
 exceptions:
   TooGenericExceptionCaught:
-    active: false
+    active: true
+    allowedExceptionNameRegex: '_|(ignore|expected).*'
   SwallowedException:
-    active: false
+    active: true
+    allowedExceptionNameRegex: '_|(ignore|expected).*'
 
 naming:
   FunctionNaming:
