@@ -139,8 +139,14 @@ tasks.register<JavaExec>("ktlintCheck") {
     classpath = ktlintCli
     mainClass.set("com.pinterest.ktlint.Main")
     workingDir = rootProject.projectDir
+    val editorConfigFile = rootProject.file(".editorconfig")
+    val reportFile = layout.buildDirectory.file("reports/ktlint/ktlint-check.txt")
+    inputs.file(editorConfigFile)
+    inputs.files(fileTree("src") { include("**/*.kt") })
+    outputs.file(reportFile)
     args(
-        "--editorconfig=${rootProject.file(".editorconfig").absolutePath}",
+        "--editorconfig=${editorConfigFile.absolutePath}",
+        "--reporter=plain,output=${reportFile.get().asFile.absolutePath}",
         "app/src/**/*.kt",
     )
 }
@@ -151,11 +157,20 @@ tasks.register<JavaExec>("detekt") {
     classpath = detektCli
     mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
     workingDir = rootProject.projectDir
+    val detektConfigFile = rootProject.file("config/detekt/detekt.yml")
+    val mainSources = projectDir.resolve("src/main/kotlin")
+    val testSources = projectDir.resolve("src/test/kotlin")
+    val reportFile = layout.buildDirectory.file("reports/detekt/detekt.txt")
+    inputs.file(detektConfigFile)
+    inputs.files(fileTree(mainSources), fileTree(testSources))
+    outputs.file(reportFile)
     args(
         "--input",
-        "${projectDir.resolve("src/main/kotlin").absolutePath},${projectDir.resolve("src/test/kotlin").absolutePath}",
+        "${mainSources.absolutePath},${testSources.absolutePath}",
         "--config",
-        rootProject.file("config/detekt/detekt.yml").absolutePath,
+        detektConfigFile.absolutePath,
         "--build-upon-default-config",
+        "--report",
+        "txt:${reportFile.get().asFile.absolutePath}",
     )
 }
