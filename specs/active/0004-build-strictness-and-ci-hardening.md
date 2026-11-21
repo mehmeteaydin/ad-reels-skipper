@@ -1,6 +1,6 @@
 # Spec 0004 — Build Strictness and CI Hardening
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0004-plan.md`
 - Self-critique: done

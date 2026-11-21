@@ -1,4 +1,5 @@
 import java.nio.file.Files
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
@@ -40,6 +41,7 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        allWarningsAsErrors = true
     }
 
     buildFeatures {
@@ -115,4 +117,45 @@ tasks.withType<Test> {
     System.getProperty("skipper.screenshot.dir")
         ?.takeIf { it.isNotBlank() }
         ?.let { systemProperty("skipper.screenshot.dir", it) }
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
+val ktlintCli = configurations.detachedConfiguration(
+    dependencies.create("com.pinterest.ktlint:ktlint-cli:1.4.1"),
+)
+
+val detektCli = configurations.detachedConfiguration(
+    dependencies.create("io.gitlab.arturbosch.detekt:detekt-cli:1.23.7"),
+)
+
+tasks.register<JavaExec>("ktlintCheck") {
+    group = "verification"
+    description = "Runs Ktlint code-style checks on Kotlin sources."
+    classpath = ktlintCli
+    mainClass.set("com.pinterest.ktlint.Main")
+    workingDir = rootProject.projectDir
+    args(
+        "--editorconfig=${rootProject.file(".editorconfig").absolutePath}",
+        "app/src/**/*.kt",
+    )
+}
+
+tasks.register<JavaExec>("detekt") {
+    group = "verification"
+    description = "Runs Detekt static analysis on Kotlin sources."
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    workingDir = rootProject.projectDir
+    args(
+        "--input",
+        "${projectDir.resolve("src/main/kotlin").absolutePath},${projectDir.resolve("src/test/kotlin").absolutePath}",
+        "--config",
+        rootProject.file("config/detekt/detekt.yml").absolutePath,
+        "--build-upon-default-config",
+    )
 }

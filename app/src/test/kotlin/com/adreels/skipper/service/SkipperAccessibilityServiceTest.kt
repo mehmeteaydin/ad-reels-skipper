@@ -122,6 +122,7 @@ class SkipperAccessibilityServiceTest {
         SkipperSettingsRepositoryProvider.setForTesting(null)
     }
 
+    @Suppress("DEPRECATION")
     private fun instagramEvent(packageName: CharSequence?): AccessibilityEvent {
         return AccessibilityEvent.obtain().apply {
             eventType = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
@@ -129,6 +130,7 @@ class SkipperAccessibilityServiceTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun node(
         text: String? = null,
         contentDescription: String? = null,
@@ -146,6 +148,7 @@ class SkipperAccessibilityServiceTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun treeWith(vararg children: AccessibilityNodeInfo, packageName: String = SkipperConfig.TARGET_PACKAGE): AccessibilityNodeInfo {
         val root = AccessibilityNodeInfo.obtain().apply {
             this.packageName = packageName
