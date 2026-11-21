@@ -13,6 +13,3 @@ step 7). Nothing lands here without that decision; noise is rejected in the tria
   — Recommendation: <the reviewer's action> — Deferred by: <name>, <YYYY-MM-DD>, <why>
   A decision deferred at bootstrap (its REPORT) uses Source: bootstrap <YYYY-MM-DD>.
 -->
-
-- **B-2** — Configure `kotlinc` strict warnings (`allWarningsAsErrors`) and Ktlint/Detekt static analysis in Gradle build and `scripts/check.conf` — Source: spec 0001, review round 2 (docs/conventions.md:46-49) — Severity: Low — Recommendation: Add `allWarningsAsErrors` and Ktlint/Detekt tasks after walking skeleton — Deferred by: mortvivant, 2026-11-15, outside walking skeleton scope after aligning `docs/conventions.md`
-- **B-5** — Harden `.github/workflows/check.yml` with explicit `permissions: contents: read`, scoped `chmod`, and `setup-gradle` caching in `doctor` job — Source: spec 0001, review round 2 (.github/workflows/check.yml:1-52) — Severity: Info — Recommendation: Add explicit read-only token permissions and Gradle wrapper caching to CI `doctor` job — Deferred by: mortvivant, 2026-11-15, CI workflow operates cleanly as-is
