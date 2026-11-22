@@ -166,34 +166,17 @@ class SkipperAccessibilityService : AccessibilityService() {
             return
         }
 
-        val canDispatch = if (config.skipDelayMs <= SkipperConfig.FAST_PRE_DISPATCH_MAX_DELAY_MS) {
-            val freshPackage = try {
-                freshRoot.packageName?.toString()
-            } catch (_: RuntimeException) {
-                null
-            } finally {
-                safeRecycleRoot(freshRoot)
-            }
-            detector.canDispatchFastScheduledSkip(
-                activePackageName = freshPackage,
-                config = config,
-                nowMs = now,
+        val freshSnapshot = try {
+            val freshPackage = freshRoot.packageName?.toString()
+            treeExtractor.extract(
+                packageName = freshPackage,
+                root = freshRoot,
+                keywords = config.keywords,
             )
-        } else {
-            val freshSnapshot = try {
-                val freshPackage = freshRoot.packageName?.toString()
-                treeExtractor.extract(
-                    packageName = freshPackage,
-                    root = freshRoot,
-                    keywords = config.keywords,
-                )
-            } finally {
-                safeRecycleRoot(freshRoot)
-            }
-            detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config, nowMs = now)
+        } finally {
+            safeRecycleRoot(freshRoot)
         }
-
-        if (!canDispatch) {
+        if (!detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config, nowMs = now)) {
             delayScheduler.cancelAll()
             detector.onSkipFailed()
             Log.d(TAG, "Pending skip aborted before dispatch")

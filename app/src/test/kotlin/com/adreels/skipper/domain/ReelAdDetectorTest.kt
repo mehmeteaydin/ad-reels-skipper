@@ -275,7 +275,7 @@ class ReelAdDetectorTest {
     }
 
     @Test
-    fun `suppresses skip triggers during 700 ms cooldown window and validates fast scheduled skip dispatch`() {
+    fun `suppresses skip triggers during 700 ms cooldown window and resumes afterward`() {
         val detector = ReelAdDetector()
         val adSnapshot = WindowSnapshot(
             packageName = SkipperConfig.TARGET_PACKAGE,
@@ -287,12 +287,16 @@ class ReelAdDetectorTest {
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_100L))
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_200L))
 
-        assertTrue(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 1_150L))
-        assertFalse(detector.canDispatchFastScheduledSkip(null, nowMs = 1_150L))
-        assertFalse(detector.canDispatchFastScheduledSkip("com.android.launcher", nowMs = 1_150L))
+        assertTrue(detector.isSponsoredReelPresent(adSnapshot, nowMs = 1_150L))
         assertFalse(
-            detector.canDispatchFastScheduledSkip(
-                SkipperConfig.TARGET_PACKAGE,
+            detector.isSponsoredReelPresent(
+                adSnapshot.copy(packageName = "com.android.launcher"),
+                nowMs = 1_150L,
+            ),
+        )
+        assertFalse(
+            detector.isSponsoredReelPresent(
+                adSnapshot,
                 config = SkipperConfig(isMasterEnabled = false),
                 nowMs = 1_150L,
             ),
@@ -300,7 +304,6 @@ class ReelAdDetectorTest {
 
         detector.onSkipDispatchStarted()
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_400L))
-        assertFalse(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 1_400L))
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),
             detector.evaluate(adSnapshot, nowMs = 1_450L),
@@ -310,7 +313,6 @@ class ReelAdDetectorTest {
         detector.onSkipDispatched(nowMs = 1_400L)
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_099L))
         assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 2_099L))
-        assertFalse(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 2_099L))
 
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),

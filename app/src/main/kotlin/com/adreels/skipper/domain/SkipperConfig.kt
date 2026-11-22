@@ -18,7 +18,6 @@ data class SkipperConfig(
         const val MIN_SKIP_DELAY_MS: Long = 50L
         const val MAX_SKIP_DELAY_MS: Long = 2000L
         const val SKIP_DELAY_STEP_MS: Long = 50L
-        const val FAST_PRE_DISPATCH_MAX_DELAY_MS: Long = 150L
         const val DEFAULT_COOLDOWN_MS: Long = 700L
         const val DEFAULT_MAX_VISIBLE_NODES: Int = 160
         const val MIN_CUSTOM_KEYWORD_LENGTH: Int = 2

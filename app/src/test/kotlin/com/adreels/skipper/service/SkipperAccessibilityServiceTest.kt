@@ -406,7 +406,7 @@ class SkipperAccessibilityServiceTest {
     }
 
     @Test
-    fun `verifies fast vs full pre-dispatch paths, recovers from cancelled swipe, and resets on lifecycle callbacks`() {
+    fun `aborts pre-dispatch on stale freshRoot across default delay, recovers from cancelled swipe, and resets on lifecycle callbacks`() {
         var rootFetches = 0
         service.activeRootProvider = {
             rootFetches++
@@ -416,8 +416,8 @@ class SkipperAccessibilityServiceTest {
         service.onAccessibilityEvent(instagramEvent(null))
         assertEquals(0, rootFetches)
 
-        // 1. Long delay (> 150 ms) performs full tree verification and aborts if Reel turned organic.
-        service.configProvider = { SkipperConfig(skipDelayMs = 400L) }
+        // 1. Default 150 ms delay performs early-exit Reels verification and aborts if Reel turned organic,
+        //    switched to comments/non-Reels screen inside Instagram, or left Instagram before dispatch.
         var phase = "ad"
         service.activeRootProvider = {
             when (phase) {
@@ -427,21 +427,32 @@ class SkipperAccessibilityServiceTest {
                     node(text = "Sponsored"),
                     packageName = "com.android.launcher",
                 )
-                "minimal_instagram_root" -> treeWith(packageName = SkipperConfig.TARGET_PACKAGE)
+                "non_reels_screen" -> treeWith(
+                    node(text = "Home", visible = true),
+                    node(text = "Sponsored"),
+                    packageName = SkipperConfig.TARGET_PACKAGE,
+                )
                 else -> treeWith(node(text = "Reels", selected = true, clickable = true), node(text = "Organic"))
             }
         }
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
         phase = "organic"
-        fakeClockMs += 400L
+        fakeClockMs += 150L
         scheduler.firePending()
         val shadowService = Shadows.shadowOf(service as AccessibilityService)
         assertTrue(shadowService.gesturesDispatched.isEmpty())
 
-        // 2. Short delay (<= 150 ms) skips second tree scan when Instagram root stays foreground,
-        //    but still aborts when root package leaves Instagram.
-        service.configProvider = { SkipperConfig(skipDelayMs = 150L) }
+        phase = "ad"
+        fakeClockMs += 150L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "non_reels_screen"
+        fakeClockMs += 150L
+        scheduler.firePending()
+        assertTrue(shadowService.gesturesDispatched.isEmpty())
+
+        // 2. Abort when root package leaves Instagram before timer fires.
         phase = "ad"
         fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
@@ -451,21 +462,18 @@ class SkipperAccessibilityServiceTest {
         scheduler.firePending()
         assertTrue(shadowService.gesturesDispatched.isEmpty())
 
+        // 3. Dispatched swipe when Reels ad remains present, cancelled by OS, recovers cleanly via onSkipFailed().
         phase = "ad"
         fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
-        phase = "minimal_instagram_root"
         fakeClockMs += 150L
         scheduler.firePending()
         assertEquals(1, shadowService.gesturesDispatched.size)
-
-        // 3. Dispatched swipe cancelled by OS recovers cleanly via onSkipFailed().
         val firstDispatch = shadowService.gesturesDispatched.single()
         firstDispatch.callback()?.onCancelled(firstDispatch.description())
 
         // Should not wait 700 ms cooldown after cancellation; resumes once 120 ms throttle passes.
-        phase = "ad"
         fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)

@@ -95,34 +95,19 @@ class ReelAdDetector {
     }
 
     /**
-     * Lightweight pre-dispatch verification for short scheduled delays (`skipDelayMs <= 150 ms`):
-     * ensures Master Toggle is enabled, [activePackageName] is still Instagram, no gesture is
-     * currently in flight, and cooldown is not active at [nowMs].
-     */
-    fun canDispatchFastScheduledSkip(
-        activePackageName: String?,
-        config: SkipperConfig = SkipperConfig(),
-        nowMs: Long? = null,
-    ): Boolean {
-        if (!config.isMasterEnabled || activePackageName != SkipperConfig.TARGET_PACKAGE || isGestureInFlight) {
-            return false
-        }
-        if (nowMs != null && isWithinCooldown(nowMs, config.cooldownMs)) {
-            return false
-        }
-        return true
-    }
-
-    /**
      * Re-checks whether [snapshot] still satisfies all rules right before executing a delayed swipe,
-     * rejecting execution if a gesture is already in flight or cooldown is still active at [nowMs].
+     * rejecting execution if Master Toggle is disabled, package left Instagram, a gesture is
+     * already in flight, or cooldown is still active at [nowMs].
      */
     fun isSponsoredReelPresent(
         snapshot: WindowSnapshot,
         config: SkipperConfig = SkipperConfig(),
         nowMs: Long? = null,
     ): Boolean {
-        if (!canDispatchFastScheduledSkip(snapshot.packageName, config, nowMs)) {
+        if (!config.isMasterEnabled || snapshot.packageName != SkipperConfig.TARGET_PACKAGE || isGestureInFlight) {
+            return false
+        }
+        if (nowMs != null && isWithinCooldown(nowMs, config.cooldownMs)) {
             return false
         }
         val inspection = inspectSnapshot(snapshot, config)
