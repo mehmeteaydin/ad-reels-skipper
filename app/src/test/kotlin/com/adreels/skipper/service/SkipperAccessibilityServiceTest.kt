@@ -392,14 +392,18 @@ class SkipperAccessibilityServiceTest {
         val exactCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*exactCapChildren))
         assertTrue(exactCapSnapshot.nodes.any { it.text == "Sponsored" })
 
-        val overCapChildren = Array(398) { idx -> node(text = "hidden-$idx", visible = false) } +
-            arrayOf(
-                node(text = "Reels", selected = true, clickable = true, visible = true),
-                node(text = "Sponsored", visible = true),
-            )
-        val overCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*overCapChildren))
+        val nodeAt400 = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true).addTrackedChild(
+            TrackingNode(textValue = "Unqueried child at 400 cap"),
+        )
+        val overCapRoot = TrackingNode(textValue = "root").addTrackedChild(
+            *Array<AccessibilityNodeInfo>(398) { idx -> node(text = "hidden-$idx", visible = false) },
+            nodeAt400,
+            node(text = "Sponsored", visible = true),
+        )
+        val overCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, overCapRoot)
         assertTrue(overCapSnapshot.nodes.any { it.text == "Reels" })
         assertTrue(overCapSnapshot.nodes.none { it.text == "Sponsored" })
+        assertEquals(0, nodeAt400.childQueries)
 
         val dispatcher = SwipeGestureDispatcher()
         val spec = dispatcher.calculateSwipeSpec(screenWidth = 1080, screenHeight = 2400)

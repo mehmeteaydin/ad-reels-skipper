@@ -69,7 +69,7 @@ class AccessibilityTreeExtractor(
                         }
                         matchedBoth = hasReelsContext && hasSponsoredLabel
                     }
-                    if (!matchedBoth && visibleNodes.size < maxVisibleNodes) {
+                    if (!matchedBoth && visibleNodes.size < maxVisibleNodes && visitedCount < MAX_TOTAL_VISITED) {
                         val childCount = current.childCount
                         for (i in 0 until childCount) {
                             current.getChild(i)?.let(queue::addLast)
