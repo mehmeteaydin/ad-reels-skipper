@@ -148,6 +148,53 @@ class SkipperAccessibilityServiceTest {
         }
     }
 
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    private class TrackingNode(
+        private val packageNameValue: CharSequence? = SkipperConfig.TARGET_PACKAGE,
+        private val textValue: CharSequence? = null,
+        private val contentDescriptionValue: CharSequence? = null,
+        private val visibleValue: Boolean = true,
+        private val selectedValue: Boolean = false,
+        private val clickableValue: Boolean = false,
+        private val throwOnPackageName: Boolean = false,
+    ) : AccessibilityNodeInfo() {
+        private val childNodes = mutableListOf<AccessibilityNodeInfo>()
+        var childQueries: Int = 0
+            private set
+        var recycleCalls: Int = 0
+            private set
+
+        fun addTrackedChild(vararg children: AccessibilityNodeInfo): TrackingNode {
+            childNodes.addAll(children)
+            return this
+        }
+
+        override fun getPackageName(): CharSequence? {
+            check(!throwOnPackageName) { "Dead binder" }
+            return packageNameValue
+        }
+
+        override fun getText(): CharSequence? = textValue
+        override fun getContentDescription(): CharSequence? = contentDescriptionValue
+        override fun isVisibleToUser(): Boolean = visibleValue
+        override fun isSelected(): Boolean = selectedValue
+        override fun isClickable(): Boolean = clickableValue
+
+        override fun getChildCount(): Int {
+            childQueries++
+            return childNodes.size
+        }
+
+        override fun getChild(index: Int): AccessibilityNodeInfo? {
+            childQueries++
+            return childNodes.getOrNull(index)
+        }
+
+        override fun recycle() {
+            recycleCalls++
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun treeWith(vararg children: AccessibilityNodeInfo, packageName: String = SkipperConfig.TARGET_PACKAGE): AccessibilityNodeInfo {
         val root = AccessibilityNodeInfo.obtain().apply {
@@ -403,6 +450,38 @@ class SkipperAccessibilityServiceTest {
 
         service.activeRootProvider = { throw IllegalStateException("Window binder died") }
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+
+        // Non-target freshRoot package must abort before traversing children during executeScheduledSkip().
+        val launcherRoot = TrackingNode(packageNameValue = "com.android.launcher").addTrackedChild(
+            TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true),
+            TrackingNode(textValue = "Sponsored"),
+        )
+        var phase = "ad"
+        service.activeRootProvider = {
+            when (phase) {
+                "launcher" -> launcherRoot
+                "throwing" -> TrackingNode(throwOnPackageName = true)
+                else -> treeWith(node(text = "Reels", selected = true, clickable = true), node(text = "Sponsored"))
+            }
+        }
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "launcher"
+        fakeClockMs += 150L
+        scheduler.firePending()
+        assertEquals(0, launcherRoot.childQueries)
+        assertTrue(shadowService.gesturesDispatched.isEmpty())
+
+        // Stale binder throwing from freshRoot.packageName must abort safely without crashing.
+        phase = "ad"
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        phase = "throwing"
+        fakeClockMs += 150L
+        scheduler.firePending()
+        assertTrue(shadowService.gesturesDispatched.isEmpty())
     }
 
     @Test

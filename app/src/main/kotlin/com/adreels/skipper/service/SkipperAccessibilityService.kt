@@ -167,7 +167,13 @@ class SkipperAccessibilityService : AccessibilityService() {
         }
 
         val freshSnapshot = try {
-            val freshPackage = freshRoot.packageName?.toString()
+            val freshPackage = safePackageName(freshRoot)
+            if (freshPackage != TARGET_PACKAGE) {
+                delayScheduler.cancelAll()
+                detector.onSkipFailed()
+                Log.d(TAG, "Pending skip aborted before dispatch")
+                return
+            }
             treeExtractor.extract(
                 packageName = freshPackage,
                 root = freshRoot,
@@ -248,6 +254,14 @@ class SkipperAccessibilityService : AccessibilityService() {
         settingsObserverJob = null
         serviceScope?.cancel()
         serviceScope = null
+    }
+
+    private fun safePackageName(root: AccessibilityNodeInfo): String? {
+        return try {
+            root.packageName?.toString()
+        } catch (_: RuntimeException) {
+            null
+        }
     }
 
     private fun safeActiveRoot(): AccessibilityNodeInfo? {
