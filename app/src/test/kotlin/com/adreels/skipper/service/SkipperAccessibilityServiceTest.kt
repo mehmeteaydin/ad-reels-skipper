@@ -571,31 +571,47 @@ class SkipperAccessibilityServiceTest {
     @Test
     @Config(sdk = [33])
     fun `recycles root, child, and early-exit queued accessibility nodes safely on API 33`() {
-        val earlyTree = treeWith(
-            node(text = "Reels", selected = true, clickable = true),
-            node(text = "Sponsored"),
-            node(text = "Queued sibling 1"),
-            node(text = "Queued sibling 2"),
+        val extractorReels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
+        val extractorSponsored = TrackingNode(textValue = "Sponsored").addTrackedChild(
+            TrackingNode(textValue = "Never queried child"),
+        )
+        val extractorSibling1 = TrackingNode(textValue = "Queued sibling 1")
+        val extractorSibling2 = TrackingNode(textValue = "Queued sibling 2")
+        val earlyTree = TrackingNode(textValue = "root").addTrackedChild(
+            extractorReels,
+            extractorSponsored,
+            extractorSibling1,
+            extractorSibling2,
         )
         val earlySnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, earlyTree)
         assertEquals(3, earlySnapshot.nodes.size)
+        assertEquals(0, earlyTree.recycleCalls)
+        assertEquals(1, extractorReels.recycleCalls)
+        assertEquals(1, extractorSponsored.recycleCalls)
+        assertEquals(0, extractorSponsored.childQueries)
+        assertEquals(1, extractorSibling1.recycleCalls)
+        assertEquals(1, extractorSibling2.recycleCalls)
 
+        val capturedNodes = mutableListOf<TrackingNode>()
         service.activeRootProvider = {
-            val container = node(text = "Container").also { containerNode ->
-                Shadows.shadowOf(containerNode).addChild(node(text = "Sponsored"))
-            }
-            treeWith(
-                node(text = "Reels", selected = true, clickable = true),
-                container,
-                node(text = "Remaining trailing node"),
-            )
+            val reels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
+            val sponsored = TrackingNode(textValue = "Sponsored")
+            val container = TrackingNode(textValue = "Container").addTrackedChild(sponsored)
+            val trailing = TrackingNode(textValue = "Remaining trailing node")
+            val root = TrackingNode(textValue = "root").addTrackedChild(reels, container, trailing)
+            capturedNodes.addAll(listOf(root, reels, container, sponsored, trailing))
+            root
         }
 
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
+        assertEquals(5, capturedNodes.size)
+        assertTrue(capturedNodes.all { it.recycleCalls == 1 })
 
         fakeClockMs += 150L
         scheduler.firePending()
+        assertEquals(10, capturedNodes.size)
+        assertTrue(capturedNodes.all { it.recycleCalls == 1 })
 
         val shadowService = Shadows.shadowOf(service as AccessibilityService)
         assertEquals(1, shadowService.gesturesDispatched.size)
@@ -605,6 +621,38 @@ class SkipperAccessibilityServiceTest {
         fakeClockMs += 700L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
+        assertEquals(15, capturedNodes.size)
+        assertTrue(capturedNodes.all { it.recycleCalls == 1 })
+    }
+
+    @Test
+    fun `does not invoke deprecated recycle on API 34+`() {
+        val childReels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
+        val childSponsored = TrackingNode(textValue = "Sponsored")
+        val childTrailing = TrackingNode(textValue = "Trailing")
+        val rootTree = TrackingNode(textValue = "root").addTrackedChild(childReels, childSponsored, childTrailing)
+
+        val snapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, rootTree)
+        assertEquals(3, snapshot.nodes.size)
+        assertTrue(listOf(rootTree, childReels, childSponsored, childTrailing).all { it.recycleCalls == 0 })
+
+        val serviceNodes = mutableListOf<TrackingNode>()
+        service.activeRootProvider = {
+            val reels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
+            val sponsored = TrackingNode(textValue = "Sponsored")
+            val trailing = TrackingNode(textValue = "Trailing")
+            val root = TrackingNode(textValue = "root").addTrackedChild(reels, sponsored, trailing)
+            serviceNodes.addAll(listOf(root, reels, sponsored, trailing))
+            root
+        }
+
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 150L
+        scheduler.firePending()
+
+        assertEquals(8, serviceNodes.size)
+        assertTrue(serviceNodes.all { it.recycleCalls == 0 })
     }
 
     @Test
