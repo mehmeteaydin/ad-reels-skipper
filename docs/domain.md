@@ -11,7 +11,7 @@
 | `Sponsored Label` | Textual or semantic indicator (e.g. "Sponsored", "Sponsorlu") denoting an advertisement | Matches built-in or user-defined keyword sets. |
 | `Ad Detector` | The pure domain logic component that evaluates node text against keyword rules | Contains no Android dependencies. |
 | `Swipe Gesture` | A programmatic vertical swipe (bottom to top) simulating user scroll | Dispatched via `AccessibilityService.dispatchGesture`. |
-| `Skip Delay` | User-configured delay in milliseconds before a detected ad is skipped | Range: 100 ms – 2000 ms (default: 400 ms). |
+| `Skip Delay` | User-configured delay in milliseconds before a detected ad is skipped | Range: 50 ms – 2000 ms (default: 150 ms). |
 | `Cooldown Window` | Minimum quiet period after a gesture during which new skips are suppressed | Prevents multi-swiping caused by animation or event floods. |
 | `Master Toggle` | Global user setting enabling or disabling automatic skipping | Controlled from the Compose dashboard. |
 
@@ -19,7 +19,7 @@
 - **BR-1 (Target Confinement)**: Detection and gesture dispatch apply exclusively when the foreground application package is `com.instagram.android`.
 - **BR-2 (Master Toggle State)**: When the Master Toggle is OFF, incoming events are discarded immediately with zero gesture dispatch and zero counter increment.
 - **BR-3 (Keyword Matching)**: An ad is detected if any visible text node or semantic description contains any entry in the active Keyword Set. Matching is case-insensitive and ignores surrounding punctuation/whitespace.
-- **BR-4 (Cooldown Protection)**: After a skip gesture is triggered, subsequent detection triggers are ignored for the duration of the Cooldown Window (default: 1200 ms).
+- **BR-4 (Cooldown Protection)**: After a skip gesture is triggered, subsequent detection triggers are ignored for the duration of the Cooldown Window (default: 700 ms).
 - **BR-5 (Configurable Delay)**: When an ad is confirmed, the swipe gesture executes after the exact configured `Skip Delay`.
 - **BR-6 (Keyword Extensibility)**: User-defined keywords are persisted locally and unioned with default keywords (`Sponsored`, `Sponsorlu`, `Paid partnership`).
 - **BR-7 (Skip Metrics)**: Each executed skip gesture increments the local lifetime skip count by 1.

@@ -133,7 +133,7 @@ class SkipperAccessibilityService : AccessibilityService() {
 
         val root = safeActiveRoot()
         val snapshot = try {
-            treeExtractor.extract(packageName = packageName, root = root)
+            treeExtractor.extract(packageName = packageName, root = root, keywords = config.keywords)
         } finally {
             safeRecycleRoot(root)
         }
@@ -166,13 +166,34 @@ class SkipperAccessibilityService : AccessibilityService() {
             return
         }
 
-        val freshSnapshot = try {
-            val freshPackage = freshRoot.packageName?.toString()
-            treeExtractor.extract(packageName = freshPackage, root = freshRoot)
-        } finally {
-            safeRecycleRoot(freshRoot)
+        val canDispatch = if (config.skipDelayMs <= SkipperConfig.FAST_PRE_DISPATCH_MAX_DELAY_MS) {
+            val freshPackage = try {
+                freshRoot.packageName?.toString()
+            } catch (_: RuntimeException) {
+                null
+            } finally {
+                safeRecycleRoot(freshRoot)
+            }
+            detector.canDispatchFastScheduledSkip(
+                activePackageName = freshPackage,
+                config = config,
+                nowMs = now,
+            )
+        } else {
+            val freshSnapshot = try {
+                val freshPackage = freshRoot.packageName?.toString()
+                treeExtractor.extract(
+                    packageName = freshPackage,
+                    root = freshRoot,
+                    keywords = config.keywords,
+                )
+            } finally {
+                safeRecycleRoot(freshRoot)
+            }
+            detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config, nowMs = now)
         }
-        if (!detector.isSponsoredReelPresent(snapshot = freshSnapshot, config = config, nowMs = now)) {
+
+        if (!canDispatch) {
             delayScheduler.cancelAll()
             detector.onSkipFailed()
             Log.d(TAG, "Pending skip aborted before dispatch")

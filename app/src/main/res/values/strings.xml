@@ -14,7 +14,7 @@
     <string name="master_toggle_paused_desc">Skipping Paused</string>
     <string name="skip_delay_label">Skip Delay</string>
     <string name="skip_delay_value">%1$d ms</string>
-    <string name="skip_delay_range_hint">Adjustable from 100 ms to 2000 ms (50 ms steps)</string>
+    <string name="skip_delay_range_hint">Adjustable from 50 ms to 2000 ms (50 ms steps)</string>
     <string name="keywords_title">Ad Detection Keywords</string>
     <string name="built_in_keywords_label">Built-in (read-only)</string>
     <string name="custom_keywords_label">Custom Keywords</string>

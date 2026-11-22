@@ -133,7 +133,7 @@ class HomeScreenTest {
         composeTestRule.onNodeWithText("Permission Required").assertIsDisplayed()
         composeTestRule.onNodeWithText("Enable Accessibility Service").assertIsDisplayed()
         composeTestRule.onNodeWithText("0").assertIsDisplayed()
-        composeTestRule.onNodeWithText("400 ms").assertIsDisplayed()
+        composeTestRule.onNodeWithText("150 ms").assertIsDisplayed()
         composeTestRule.onNodeWithTag(DashboardTags.MASTER_TOGGLE).assertIsOn()
         composeTestRule.onNodeWithText("Sponsored").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sponsorlu").assertIsDisplayed()
@@ -165,6 +165,15 @@ class HomeScreenTest {
 
         composeTestRule.onNodeWithText("Service Active").assertIsDisplayed()
         composeTestRule.onNodeWithText("12").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag(DashboardTags.SKIP_DELAY_SLIDER)
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(50f)
+            }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("50 ms").assertIsDisplayed()
+        assertEquals(50L, fakeRepository.settingsFlow.value.skipDelayMs)
 
         composeTestRule.onNodeWithTag(DashboardTags.SKIP_DELAY_SLIDER)
             .performScrollTo()
