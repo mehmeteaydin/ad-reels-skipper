@@ -38,7 +38,7 @@ class SkipperSettingsRepositoryTest {
         assertEquals(
             SkipperSettings(
                 isMasterEnabled = true,
-                skipDelayMs = 400L,
+                skipDelayMs = 150L,
                 customKeywords = emptySet(),
                 skippedReelsCount = 0,
             ),
@@ -46,8 +46,10 @@ class SkipperSettingsRepositoryTest {
         )
 
         repo1.setMasterEnabled(false)
+        repo1.setSkipDelayMs(10L)
+        assertEquals(50L, repo1.settingsFlow.value.skipDelayMs)
         repo1.setSkipDelayMs(50L)
-        assertEquals(100L, repo1.settingsFlow.value.skipDelayMs)
+        assertEquals(50L, repo1.settingsFlow.value.skipDelayMs)
         repo1.setSkipDelayMs(3_500L)
         assertEquals(2_000L, repo1.settingsFlow.value.skipDelayMs)
         repo1.setSkipDelayMs(750L)
@@ -109,7 +111,7 @@ class SkipperSettingsRepositoryTest {
             assertEquals(
                 SkipperSettings(
                     isMasterEnabled = true,
-                    skipDelayMs = 400L,
+                    skipDelayMs = 150L,
                     customKeywords = emptySet(),
                     skippedReelsCount = 0,
                 ),

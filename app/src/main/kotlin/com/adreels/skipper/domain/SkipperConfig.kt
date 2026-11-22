@@ -13,22 +13,23 @@ data class SkipperConfig(
 ) {
     companion object {
         const val TARGET_PACKAGE: String = "com.instagram.android"
-        const val DEFAULT_THROTTLE_INTERVAL_MS: Long = 150L
-        const val DEFAULT_SKIP_DELAY_MS: Long = 400L
-        const val MIN_SKIP_DELAY_MS: Long = 100L
+        const val DEFAULT_THROTTLE_INTERVAL_MS: Long = 120L
+        const val DEFAULT_SKIP_DELAY_MS: Long = 150L
+        const val MIN_SKIP_DELAY_MS: Long = 50L
         const val MAX_SKIP_DELAY_MS: Long = 2000L
         const val SKIP_DELAY_STEP_MS: Long = 50L
-        const val DEFAULT_COOLDOWN_MS: Long = 1200L
-        const val DEFAULT_MAX_VISIBLE_NODES: Int = 500
+        const val FAST_PRE_DISPATCH_MAX_DELAY_MS: Long = 150L
+        const val DEFAULT_COOLDOWN_MS: Long = 700L
+        const val DEFAULT_MAX_VISIBLE_NODES: Int = 160
         const val MIN_CUSTOM_KEYWORD_LENGTH: Int = 2
         const val MAX_CUSTOM_KEYWORD_LENGTH: Int = 40
         val BUILT_IN_DISPLAY_KEYWORDS: List<String> = listOf("Sponsored", "Sponsorlu", "Paid partnership")
         val DEFAULT_KEYWORDS: Set<String> = setOf("sponsored", "sponsorlu", "paid partnership")
 
-        /** Clamps any candidate skip delay in milliseconds to the allowed `100..2000 ms` range. */
+        /** Clamps any candidate skip delay in milliseconds to the allowed `50..2000 ms` range. */
         fun clampSkipDelay(delayMs: Long): Long = delayMs.coerceIn(MIN_SKIP_DELAY_MS, MAX_SKIP_DELAY_MS)
 
-        /** Snaps [delayMs] to the nearest `50 ms` increment within `100..2000 ms`. */
+        /** Snaps [delayMs] to the nearest `50 ms` increment within `50..2000 ms`. */
         fun snapAndClampSkipDelay(delayMs: Long): Long {
             val clamped = clampSkipDelay(delayMs)
             val steps = (clamped - MIN_SKIP_DELAY_MS + SKIP_DELAY_STEP_MS / 2L) / SKIP_DELAY_STEP_MS

@@ -35,7 +35,7 @@ class ReelAdDetectorTest {
             WindowSnapshot(packageName = SkipperConfig.TARGET_PACKAGE, nodes = listOf(reelsContextNode(), VisibleNode(text = "Sponsored"))),
             nowMs = 500L,
         )
-        assertEquals(SkipDecision.ScheduleSkip(400L), scheduled)
+        assertEquals(SkipDecision.ScheduleSkip(150L), scheduled)
 
         val cancelled = detector.evaluate(
             WindowSnapshot(packageName = "com.android.launcher", nodes = emptyList()),
@@ -59,7 +59,7 @@ class ReelAdDetectorTest {
         )
         assertEquals(SkipDecision.Ignore(IgnoreReason.MASTER_DISABLED), ignoredWhenOff)
 
-        assertEquals(SkipDecision.ScheduleSkip(400L), detector.evaluate(adSnapshot, nowMs = 300L))
+        assertEquals(SkipDecision.ScheduleSkip(150L), detector.evaluate(adSnapshot, nowMs = 300L))
         assertEquals(
             SkipDecision.CancelPendingSkip,
             detector.evaluate(adSnapshot, nowMs = 350L, config = SkipperConfig(isMasterEnabled = false)),
@@ -96,7 +96,7 @@ class ReelAdDetectorTest {
                         nowMs = 1_000L + idx * 500L,
                     )
                     assertEquals(
-                        SkipDecision.ScheduleSkip(400L),
+                        SkipDecision.ScheduleSkip(150L),
                         decision,
                         "Expected '$label' to match in locale $locale",
                     )
@@ -151,7 +151,7 @@ class ReelAdDetectorTest {
             ),
             nowMs = 700L,
         )
-        assertEquals(SkipDecision.ScheduleSkip(400L), contentDescAd)
+        assertEquals(SkipDecision.ScheduleSkip(150L), contentDescAd)
     }
 
     @Test
@@ -185,7 +185,7 @@ class ReelAdDetectorTest {
             ),
         )
         assertEquals(
-            SkipDecision.ScheduleSkip(400L),
+            SkipDecision.ScheduleSkip(150L),
             detector.evaluate(nonClickableHeader, nowMs = 300L),
         )
 
@@ -213,38 +213,38 @@ class ReelAdDetectorTest {
     }
 
     @Test
-    fun `caps inspection at 500 visible nodes while skipping invisible nodes from the budget`() {
-        val visibleLimitNodes = List(499) { VisibleNode(text = "comment $it", isVisibleToUser = true) } +
+    fun `caps inspection at 160 visible nodes while skipping invisible nodes from the budget`() {
+        val visibleLimitNodes = List(159) { VisibleNode(text = "comment $it", isVisibleToUser = true) } +
             VisibleNode(text = "Reels", isSelected = true, isVisibleToUser = true)
 
         val atLimitDetector = ReelAdDetector()
-        val withInvisibleBefore500 = listOf(
+        val withInvisibleBefore160 = listOf(
             VisibleNode(text = "Offscreen ad", isVisibleToUser = false),
         ) + visibleLimitNodes.dropLast(1) + listOf(
             VisibleNode(text = "Sponsored", isVisibleToUser = true),
         )
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.NOT_REELS_CONTEXT),
-            atLimitDetector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, withInvisibleBefore500), nowMs = 100L),
+            atLimitDetector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, withInvisibleBefore160), nowMs = 100L),
         )
 
-        val exact500th = listOf(
+        val exact160th = listOf(
             VisibleNode(text = "Offscreen organic", isVisibleToUser = false),
             reelsContextNode(),
-        ) + List(498) { VisibleNode(text = "node $it", isVisibleToUser = true) } +
+        ) + List(158) { VisibleNode(text = "node $it", isVisibleToUser = true) } +
             VisibleNode(text = "Sponsored", isVisibleToUser = true)
         assertEquals(
-            SkipDecision.ScheduleSkip(400L),
-            atLimitDetector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, exact500th), nowMs = 300L),
+            SkipDecision.ScheduleSkip(150L),
+            atLimitDetector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, exact160th), nowMs = 300L),
         )
 
-        val over500Detector = ReelAdDetector()
-        val atNode501 = listOf(reelsContextNode()) +
-            List(499) { VisibleNode(text = "node $it", isVisibleToUser = true) } +
+        val over160Detector = ReelAdDetector()
+        val atNode161 = listOf(reelsContextNode()) +
+            List(159) { VisibleNode(text = "node $it", isVisibleToUser = true) } +
             VisibleNode(text = "Sponsored", isVisibleToUser = true)
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.NO_SPONSORED_LABEL),
-            over500Detector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, atNode501), nowMs = 500L),
+            over160Detector.evaluate(WindowSnapshot(SkipperConfig.TARGET_PACKAGE, atNode161), nowMs = 500L),
         )
     }
 
@@ -262,18 +262,20 @@ class ReelAdDetectorTest {
 
         assertEquals(SkipDecision.Ignore(IgnoreReason.NO_SPONSORED_LABEL), detector.evaluate(organicSnapshot, nowMs = 1_000L))
         assertEquals(SkipDecision.Ignore(IgnoreReason.THROTTLED), detector.evaluate(adSnapshot, nowMs = 1_100L))
-        assertEquals(SkipDecision.ScheduleSkip(400L), detector.evaluate(adSnapshot, nowMs = 1_150L))
+        assertEquals(SkipDecision.ScheduleSkip(150L), detector.evaluate(adSnapshot, nowMs = 1_120L))
 
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_300L))
         assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_200L))
-        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_350L))
+        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_230L))
         assertTrue(detector.isSponsoredReelPresent(adSnapshot))
 
-        assertEquals(SkipDecision.CancelPendingSkip, detector.evaluate(organicSnapshot, nowMs = 1_500L))
+        assertEquals(SkipDecision.CancelPendingSkip, detector.evaluate(organicSnapshot, nowMs = 1_300L))
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_420L))
         assertFalse(detector.isSponsoredReelPresent(organicSnapshot))
     }
 
     @Test
-    fun `suppresses skip triggers during 1200 ms cooldown window and resumes afterward`() {
+    fun `suppresses skip triggers during 700 ms cooldown window and validates fast scheduled skip dispatch`() {
         val detector = ReelAdDetector()
         val adSnapshot = WindowSnapshot(
             packageName = SkipperConfig.TARGET_PACKAGE,
@@ -281,11 +283,24 @@ class ReelAdDetectorTest {
         )
 
         assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_000L))
-        assertEquals(SkipDecision.ScheduleSkip(400L), detector.evaluate(adSnapshot, nowMs = 1_000L))
+        assertEquals(SkipDecision.ScheduleSkip(150L), detector.evaluate(adSnapshot, nowMs = 1_000L))
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_100L))
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_200L))
+
+        assertTrue(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 1_150L))
+        assertFalse(detector.canDispatchFastScheduledSkip(null, nowMs = 1_150L))
+        assertFalse(detector.canDispatchFastScheduledSkip("com.android.launcher", nowMs = 1_150L))
+        assertFalse(
+            detector.canDispatchFastScheduledSkip(
+                SkipperConfig.TARGET_PACKAGE,
+                config = SkipperConfig(isMasterEnabled = false),
+                nowMs = 1_150L,
+            ),
+        )
 
         detector.onSkipDispatchStarted()
         assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_400L))
+        assertFalse(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 1_400L))
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),
             detector.evaluate(adSnapshot, nowMs = 1_450L),
@@ -293,31 +308,36 @@ class ReelAdDetectorTest {
         assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 1_450L))
 
         detector.onSkipDispatched(nowMs = 1_400L)
-        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_599L))
-        assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 2_599L))
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_099L))
+        assertFalse(detector.isSponsoredReelPresent(adSnapshot, nowMs = 2_099L))
+        assertFalse(detector.canDispatchFastScheduledSkip(SkipperConfig.TARGET_PACKAGE, nowMs = 2_099L))
 
         assertEquals(
             SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE),
-            detector.evaluate(adSnapshot, nowMs = 2_599L),
+            detector.evaluate(adSnapshot, nowMs = 2_099L),
         )
-        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_600L))
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_100L))
         assertEquals(
-            SkipDecision.ScheduleSkip(400L),
-            detector.evaluate(adSnapshot, nowMs = 2_600L),
+            SkipDecision.ScheduleSkip(150L),
+            detector.evaluate(adSnapshot, nowMs = 2_100L),
         )
+
+        detector.onSkipFailed()
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 2_300L))
     }
 
     @Test
-    fun `clamps and snaps skip delay values to 100 through 2000 ms bounds`() {
-        assertEquals(100L, SkipperConfig.clampSkipDelay(0L))
-        assertEquals(100L, SkipperConfig.clampSkipDelay(100L))
+    fun `clamps and snaps skip delay values to 50 through 2000 ms bounds`() {
+        assertEquals(50L, SkipperConfig.clampSkipDelay(0L))
+        assertEquals(50L, SkipperConfig.clampSkipDelay(50L))
         assertEquals(650L, SkipperConfig.clampSkipDelay(650L))
         assertEquals(2_000L, SkipperConfig.clampSkipDelay(2_000L))
         assertEquals(2_000L, SkipperConfig.clampSkipDelay(5_000L))
 
-        assertEquals(100L, SkipperConfig.snapAndClampSkipDelay(25L))
-        assertEquals(100L, SkipperConfig.snapAndClampSkipDelay(124L))
-        assertEquals(150L, SkipperConfig.snapAndClampSkipDelay(125L))
+        assertEquals(50L, SkipperConfig.snapAndClampSkipDelay(20L))
+        assertEquals(50L, SkipperConfig.snapAndClampSkipDelay(74L))
+        assertEquals(100L, SkipperConfig.snapAndClampSkipDelay(75L))
+        assertEquals(150L, SkipperConfig.snapAndClampSkipDelay(150L))
         assertEquals(400L, SkipperConfig.snapAndClampSkipDelay(400L))
         assertEquals(2_000L, SkipperConfig.snapAndClampSkipDelay(2_400L))
     }

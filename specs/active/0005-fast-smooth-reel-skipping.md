@@ -1,6 +1,6 @@
 # Spec 0005 — Fast and Smooth Sponsored Reel Skipping
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0005-plan.md`
 - Self-critique: done

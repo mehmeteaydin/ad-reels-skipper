@@ -25,7 +25,7 @@ class ReelAdDetector {
         if (!config.isMasterEnabled || packageName != SkipperConfig.TARGET_PACKAGE) {
             return false
         }
-        if (isGestureInFlight) {
+        if (isGestureInFlight || isSkipPending) {
             return false
         }
         val lastSkip = lastSkipDispatchedAtMs
@@ -95,6 +95,25 @@ class ReelAdDetector {
     }
 
     /**
+     * Lightweight pre-dispatch verification for short scheduled delays (`skipDelayMs <= 150 ms`):
+     * ensures Master Toggle is enabled, [activePackageName] is still Instagram, no gesture is
+     * currently in flight, and cooldown is not active at [nowMs].
+     */
+    fun canDispatchFastScheduledSkip(
+        activePackageName: String?,
+        config: SkipperConfig = SkipperConfig(),
+        nowMs: Long? = null,
+    ): Boolean {
+        if (!config.isMasterEnabled || activePackageName != SkipperConfig.TARGET_PACKAGE || isGestureInFlight) {
+            return false
+        }
+        if (nowMs != null && isWithinCooldown(nowMs, config.cooldownMs)) {
+            return false
+        }
+        return true
+    }
+
+    /**
      * Re-checks whether [snapshot] still satisfies all rules right before executing a delayed swipe,
      * rejecting execution if a gesture is already in flight or cooldown is still active at [nowMs].
      */
@@ -103,17 +122,16 @@ class ReelAdDetector {
         config: SkipperConfig = SkipperConfig(),
         nowMs: Long? = null,
     ): Boolean {
-        if (!config.isMasterEnabled || snapshot.packageName != SkipperConfig.TARGET_PACKAGE || isGestureInFlight) {
+        if (!canDispatchFastScheduledSkip(snapshot.packageName, config, nowMs)) {
             return false
-        }
-        if (nowMs != null) {
-            val lastSkip = lastSkipDispatchedAtMs
-            if (lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
-                return false
-            }
         }
         val inspection = inspectSnapshot(snapshot, config)
         return inspection.hasReelsContext && inspection.hasSponsoredLabel
+    }
+
+    private fun isWithinCooldown(nowMs: Long, cooldownMs: Long): Boolean {
+        val lastSkip = lastSkipDispatchedAtMs ?: return false
+        return nowMs - lastSkip in 0L until cooldownMs
     }
 
     /** Marks that an upward swipe gesture has started dispatching asynchronously. */
@@ -153,9 +171,7 @@ class ReelAdDetector {
     }
 
     private fun inspectSnapshot(snapshot: WindowSnapshot, config: SkipperConfig): SnapshotInspection {
-        val normalizedKeywords = config.keywords
-            .map(::normalizeTokens)
-            .filter { it.isNotEmpty() }
+        val normalizedKeywords = normalizeKeywords(config.keywords)
 
         var hasReelsContext = false
         var hasSponsoredLabel = false
@@ -169,10 +185,10 @@ class ReelAdDetector {
             val textTokens = node.text?.let(::normalizeTokens).orEmpty()
             val descTokens = node.contentDescription?.let(::normalizeTokens).orEmpty()
 
-            if (!hasReelsContext && matchesReelsContext(node, textTokens, descTokens)) {
+            if (!hasReelsContext && isReelsContextNode(node, textTokens, descTokens)) {
                 hasReelsContext = true
             }
-            if (!hasSponsoredLabel && matchesAnyKeyword(textTokens, descTokens, normalizedKeywords)) {
+            if (!hasSponsoredLabel && isSponsoredNode(textTokens, descTokens, normalizedKeywords)) {
                 hasSponsoredLabel = true
             }
             if (hasReelsContext && hasSponsoredLabel) break
@@ -184,32 +200,6 @@ class ReelAdDetector {
         )
     }
 
-    private fun matchesReelsContext(
-        node: VisibleNode,
-        textTokens: String,
-        descTokens: String,
-    ): Boolean {
-        val isSelectedReelsTab = node.isSelected &&
-            (containsNormalizedPhrase(textTokens, REELS_TOKEN) ||
-                containsNormalizedPhrase(descTokens, REELS_TOKEN))
-        val isReelsViewerHeader = !node.isClickable && textTokens == REELS_TOKEN
-        val isReelContentDescription =
-            descTokens == REEL_BY_PREFIX || descTokens.startsWith("$REEL_BY_PREFIX ")
-        return isSelectedReelsTab || isReelsViewerHeader || isReelContentDescription
-    }
-
-    private fun matchesAnyKeyword(
-        textTokens: String,
-        descTokens: String,
-        normalizedKeywords: List<String>,
-    ): Boolean {
-        if (normalizedKeywords.isEmpty()) return false
-        return normalizedKeywords.any { keyword ->
-            containsNormalizedPhrase(textTokens, keyword) ||
-                containsNormalizedPhrase(descTokens, keyword)
-        }
-    }
-
     private data class SnapshotInspection(
         val hasReelsContext: Boolean,
         val hasSponsoredLabel: Boolean,
@@ -218,6 +208,39 @@ class ReelAdDetector {
     companion object {
         private const val REELS_TOKEN = "reels"
         private const val REEL_BY_PREFIX = "reel by"
+
+        /** Normalizes and filters non-empty keyword phrases once per tree or snapshot scan. */
+        fun normalizeKeywords(keywords: Set<String>): List<String> = keywords
+            .map(::normalizeTokens)
+            .filter { it.isNotEmpty() }
+
+        /** Returns `true` when a visible [node] establishes active Instagram Reels context. */
+        fun isReelsContextNode(
+            node: VisibleNode,
+            textTokens: String = node.text?.let(::normalizeTokens).orEmpty(),
+            descTokens: String = node.contentDescription?.let(::normalizeTokens).orEmpty(),
+        ): Boolean {
+            val isSelectedReelsTab = node.isSelected &&
+                (containsNormalizedPhrase(textTokens, REELS_TOKEN) ||
+                    containsNormalizedPhrase(descTokens, REELS_TOKEN))
+            val isReelsViewerHeader = !node.isClickable && textTokens == REELS_TOKEN
+            val isReelContentDescription =
+                descTokens == REEL_BY_PREFIX || descTokens.startsWith("$REEL_BY_PREFIX ")
+            return isSelectedReelsTab || isReelsViewerHeader || isReelContentDescription
+        }
+
+        /** Returns `true` when either [textTokens] or [descTokens] matches any normalized keyword phrase. */
+        fun isSponsoredNode(
+            textTokens: String,
+            descTokens: String,
+            normalizedKeywords: List<String>,
+        ): Boolean {
+            if (normalizedKeywords.isEmpty()) return false
+            return normalizedKeywords.any { keyword ->
+                containsNormalizedPhrase(textTokens, keyword) ||
+                    containsNormalizedPhrase(descTokens, keyword)
+            }
+        }
 
         /**
          * Normalizes [raw] into lowercase alphanumeric tokens separated by single spaces,
