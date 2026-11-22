@@ -47,6 +47,7 @@
 - **Instagram view ID volatility**: Never bind detection rules to internal view IDs (e.g. `R.id.text_view`), as Instagram obfuscates and changes them with each release. Rely solely on visible text, content descriptions, and semantic node structure.
 
 ## Enforced by tooling
-- Android Lint (`./gradlew lintDebug --no-daemon`) for Android/Kotlin static analysis.
+- Kotlin compiler strict mode (`allWarningsAsErrors = true` across main and unit-test compilation targets).
+- Ktlint (`./gradlew ktlintCheck --no-daemon`), Detekt (`./gradlew detekt --no-daemon`), and Android Lint (`./gradlew lintDebug --no-daemon`) for Kotlin/Android static analysis and code style (`B-2`).
 - JUnit 5, Robolectric Compose UI tests, and XML manifest/config verification (`./gradlew testDebugUnitTest --no-daemon`).
-- `./scripts/check` as the single verification gate (strict `kotlinc` warnings and Ktlint/Detekt deferred in `specs/backlog.md` as `B-2`).
+- `./scripts/check` as the single verification gate (`test`, `lint`, `build`).

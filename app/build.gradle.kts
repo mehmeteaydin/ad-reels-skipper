@@ -1,4 +1,5 @@
 import java.nio.file.Files
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
@@ -40,6 +41,7 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        allWarningsAsErrors = true
     }
 
     buildFeatures {
@@ -95,6 +97,13 @@ val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
 tasks.withType<Test> {
     useJUnitPlatform()
     robolectricSdkJars.forEach { inputs.files(it) }
+    inputs.files(
+        layout.projectDirectory.file("build.gradle.kts"),
+        rootProject.file(".editorconfig"),
+        rootProject.file("config/detekt/detekt.yml"),
+        rootProject.file("scripts/check.conf"),
+        rootProject.file(".github/workflows/check.yml"),
+    )
     doFirst {
         val sdkDir = robolectricSdkDir.get().asFile
         sdkDir.mkdirs()
@@ -115,4 +124,60 @@ tasks.withType<Test> {
     System.getProperty("skipper.screenshot.dir")
         ?.takeIf { it.isNotBlank() }
         ?.let { systemProperty("skipper.screenshot.dir", it) }
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
+    }
+}
+
+val ktlintCli = configurations.detachedConfiguration(
+    dependencies.create("com.pinterest.ktlint:ktlint-cli:1.4.1"),
+)
+
+val detektCli = configurations.detachedConfiguration(
+    dependencies.create("io.gitlab.arturbosch.detekt:detekt-cli:1.23.7"),
+)
+
+tasks.register<JavaExec>("ktlintCheck") {
+    group = "verification"
+    description = "Runs Ktlint code-style checks on Kotlin sources."
+    classpath = ktlintCli
+    mainClass.set("com.pinterest.ktlint.Main")
+    workingDir = rootProject.projectDir
+    val editorConfigFile = rootProject.file(".editorconfig")
+    val reportFile = layout.buildDirectory.file("reports/ktlint/ktlint-check.txt")
+    inputs.file(editorConfigFile)
+    inputs.files(fileTree("src") { include("**/*.kt") })
+    outputs.file(reportFile)
+    args(
+        "--editorconfig=${editorConfigFile.absolutePath}",
+        "--reporter=plain,output=${reportFile.get().asFile.absolutePath}",
+        "app/src/**/*.kt",
+    )
+}
+
+tasks.register<JavaExec>("detekt") {
+    group = "verification"
+    description = "Runs Detekt static analysis on Kotlin sources."
+    classpath = detektCli
+    mainClass.set("io.gitlab.arturbosch.detekt.cli.Main")
+    workingDir = rootProject.projectDir
+    val detektConfigFile = rootProject.file("config/detekt/detekt.yml")
+    val mainSources = projectDir.resolve("src/main/kotlin")
+    val testSources = projectDir.resolve("src/test/kotlin")
+    val reportFile = layout.buildDirectory.file("reports/detekt/detekt.txt")
+    inputs.file(detektConfigFile)
+    inputs.files(fileTree(mainSources), fileTree(testSources))
+    outputs.file(reportFile)
+    args(
+        "--input",
+        "${mainSources.absolutePath},${testSources.absolutePath}",
+        "--config",
+        detektConfigFile.absolutePath,
+        "--build-upon-default-config",
+        "--report",
+        "txt:${reportFile.get().asFile.absolutePath}",
+    )
 }

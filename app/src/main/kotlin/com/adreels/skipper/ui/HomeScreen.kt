@@ -293,7 +293,7 @@ private fun SkipDelayCard(
     val stepsCount = (
         (SkipperConfig.MAX_SKIP_DELAY_MS - SkipperConfig.MIN_SKIP_DELAY_MS) /
             SkipperConfig.SKIP_DELAY_STEP_MS
-        ).toInt() - 1
+    ).toInt() - 1
 
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
