@@ -35,16 +35,18 @@
 ## Data rules
 - **Zero remote telemetry**: No analytics, telemetry, or external payloads are collected or stored.
 - **Preferences**: Stored via Jetpack DataStore Preferences.
-- **Timing & Delays**: Durations stored in milliseconds (`Long` or `Int`). Valid skip delay range: 100 ms to 2000 ms (default: 400 ms).
+- **Timing & Delays**: Durations stored in milliseconds (`Long` or `Int`). Valid skip delay range: 50 ms to 2000 ms (default: 150 ms).
 - **Keywords**: Normalized as lowercase, trimmed strings. Stored as `Set<String>`.
 
 ## Known traps
 - **AccessibilityNodeInfo memory leaks**: Always release or recycle `AccessibilityNodeInfo` objects where appropriate, especially on older Android API versions.
 - **rootInActiveWindow ownership & SDK test coverage**: Recycle the root node obtained from `rootInActiveWindow` on API < 34 in addition to child nodes, and exercise Robolectric service tests on both API <= 33 and API 34+ because `recycle()` paths are skipped on SDK 34+.
 - **Event flooding**: `AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED` triggers rapidly during scroll animations. Node analysis must be debounced / throttled to preserve CPU and battery.
-- **Async dispatchGesture in-flight window**: `AccessibilityService.dispatchGesture` executes over its stroke duration (200 ms) before invoking `onCompleted`/`onCancelled` while scroll events continue arriving; guard the in-flight window so mid-swipe events cannot arm a second skip that bypasses cooldown.
+- **Async dispatchGesture in-flight window**: `AccessibilityService.dispatchGesture` executes over its stroke duration (100 ms) before invoking `onCompleted`/`onCancelled` while scroll events continue arriving; guard the in-flight window so mid-swipe events cannot arm a second skip that bypasses cooldown.
 - **Kotlin `catch (RuntimeException)` misses DataStore `IOException`**: Kotlin erases checked-exception visibility, and `java.io.IOException` extends `Exception` rather than `RuntimeException`; fire-and-forget `launch` blocks wrapping `DataStore.edit` or I/O calls must explicitly catch `IOException` (after rethrowing `CancellationException`) to stay crash-free.
 - **Instagram view ID volatility**: Never bind detection rules to internal view IDs (e.g. `R.id.text_view`), as Instagram obfuscates and changes them with each release. Rely solely on visible text, content descriptions, and semantic node structure.
+- **Static XML packageNames & notificationTimeout blind spots**: An XML-level `android:packageNames="com.instagram.android"` filter prevents the service from receiving non-Instagram events when the user switches apps while a delayed skip timer is armed, and a non-zero `android:notificationTimeout` drops rapid window-change events; omit static package filtering so runtime package checks can cancel pending timers on app switch, and keep `notificationTimeout="0"` with explicit runtime throttling.
+- **Fresh rootInActiveWindow package verification before delayed gesture dispatch**: When a delayed skip timer fires, re-check `rootInActiveWindow.packageName == "com.instagram.android"` inside a `RuntimeException`-guarded helper before traversing the tree or dispatching a gesture so stale timers cannot swipe another app or crash on dead binder state.
 
 ## Enforced by tooling
 - Kotlin compiler strict mode (`allWarningsAsErrors = true` across main and unit-test compilation targets).

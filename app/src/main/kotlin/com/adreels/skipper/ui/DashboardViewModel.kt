@@ -72,7 +72,7 @@ class DashboardViewModel(
         }
     }
 
-    /** Snaps and clamps [delayMs] to `100..2000 ms` (`50 ms` step) and persists it (`BR-5`). */
+    /** Snaps and clamps [delayMs] to `50..2000 ms` (`50 ms` step) and persists it (`BR-5`). */
     fun setSkipDelayMs(delayMs: Long) {
         val snapped = SkipperConfig.snapAndClampSkipDelay(delayMs)
         _uiState.update { it.copy(skipDelayMs = snapped) }
