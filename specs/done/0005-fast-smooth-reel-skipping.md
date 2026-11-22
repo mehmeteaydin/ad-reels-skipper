@@ -1,6 +1,6 @@
 # Spec 0005 — Fast and Smooth Sponsored Reel Skipping
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0005-plan.md`
 - Self-critique: done
@@ -25,7 +25,7 @@ Instagram Reels users need sponsored Reels to be skipped with near-instant respo
   2. On a fresh install, the **Skip Delay** card displays `150 ms` and its slider spans `50 ms` to `2000 ms` in `50 ms` increments (`38` intermediate steps).
   3. While watching Instagram Reels, when a sponsored Reel appears, the service skips it after the configured delay (`50..2000 ms`, default `150 ms`) using a fast `100 ms` upward flick without stalling Instagram playback.
 - **States**:
-  - `S-1 (Permission Required)`: Accessibility service is disabled in Android system settings; warning card and `"Enable in Accessibility Settings"` CTA are displayed alongside the `50..2000 ms` (default `150 ms`) delay slider.
+  - `S-1 (Permission Required)`: Accessibility service is disabled in Android system settings; warning card and `"Enable Accessibility Service"` CTA are displayed alongside the `50..2000 ms` (default `150 ms`) delay slider.
   - `S-2 (Service Active / Skipping Enabled)`: Accessibility service is enabled and Master Toggle is ON; active status card, lifetime skipped count, `50..2000 ms` delay slider, and keyword chips are displayed.
   - `S-3 (Service Active / Skipping Paused)`: Accessibility service is enabled and Master Toggle is OFF; paused status card is displayed and incoming events are ignored (`BR-2`).
   - `S-4 (Invalid Keyword Input)`: User submits an invalid or duplicate custom keyword; inline validation error is shown without mutating persisted keywords.
@@ -41,25 +41,25 @@ Instagram Reels users need sponsored Reels to be skipped with near-instant respo
   - Network access, analytics, or external dependencies.
 
 ## Acceptance criteria
-- [ ] AC-1 — Given `SkipperConfig` and `DataStoreSkipperSettingsRepository`, the default configuration uses `skipDelayMs = 150`, `MIN_SKIP_DELAY_MS = 50`, `MAX_SKIP_DELAY_MS = 2000`, `SKIP_DELAY_STEP_MS = 50`, `cooldownMs = 700`, `throttleIntervalMs = 120`, and `maxVisibleNodes = 160`, clamping out-of-range delay values to `50..2000 ms` and snapping non-step values to the nearest `50 ms` increment (`BR-4`, `BR-5`).
-- [ ] AC-2 — Given an `AccessibilityNodeInfo` tree in `com.instagram.android`, `AccessibilityTreeExtractor` visits at most `160` visible nodes and `400` total nodes, stops traversal immediately via early exit as soon as both Reels context and an active sponsored keyword match are found, and recycles all visited and remaining queued non-root nodes on Android API < 34 (`BR-1`, `BR-3`).
-- [ ] AC-3 — Given a newly confirmed sponsored Reel that schedules a delayed skip (`isSkipPending = true`), subsequent `com.instagram.android` accessibility events while the skip is pending do not trigger accessibility tree extraction (`shouldInspectSnapshot` returns `false`), whereas a non-target package event or Master Toggle OFF cancels the pending skip immediately; when the scheduled timer fires for any delay (`50..2000 ms`), the service verifies that the active root window is non-null with `packageName == "com.instagram.android"` before performing a bounded early-exit window inspection, and aborts without swiping if the foreground app changed, Reels context disappeared (e.g., Comments, Profile, or Home feed), or the sponsored indicator is no longer present (`INV-2`).
-- [ ] AC-4 — Given positive display dimensions `(W, H)`, `SwipeGestureDispatcher` computes `centerX = 0.65f * W`, `startY = 0.78f * H`, `endY = 0.18f * H`, and `durationMs = 100L`, dispatches the upward gesture, opens the `700 ms` cooldown window and increments the persisted lifetime skip counter by `1` only in `onCompleted`, and clears pending/in-flight state without incrementing the counter on invalid bounds, cancellation, or dispatch failure (`BR-4`, `BR-7`, `INV-2`).
-- [ ] AC-5 — Given the Compose dashboard (`HomeScreen`) across states `S-1`..`S-4`, the Skip Delay slider displays `150 ms` by default and adjusts across `50..2000 ms` in `50 ms` steps (`steps = 38`), verified by Robolectric Compose UI tests and headless screenshots for `S-1`, `S-2`, `S-3`, and `S-4`.
-- [ ] AC-6 — Given the repository documentation and verification suite, `docs/domain.md` reflects the updated `Skip Delay` (`50 ms – 2000 ms`, default `150 ms`) and `Cooldown Window` (`700 ms`), all architecture/privacy boundaries (`INV-1`, `INV-2`) hold, and both `./scripts/check` and `./scripts/check --fast` exit `0`.
+- [x] AC-1 — Given `SkipperConfig` and `DataStoreSkipperSettingsRepository`, the default configuration uses `skipDelayMs = 150`, `MIN_SKIP_DELAY_MS = 50`, `MAX_SKIP_DELAY_MS = 2000`, `SKIP_DELAY_STEP_MS = 50`, `cooldownMs = 700`, `throttleIntervalMs = 120`, and `maxVisibleNodes = 160`, clamping out-of-range delay values to `50..2000 ms` and snapping non-step values to the nearest `50 ms` increment (`BR-4`, `BR-5`).
+- [x] AC-2 — Given an `AccessibilityNodeInfo` tree in `com.instagram.android`, `AccessibilityTreeExtractor` visits at most `160` visible nodes and `400` total nodes, stops traversal immediately via early exit as soon as both Reels context and an active sponsored keyword match are found, and recycles all visited and remaining queued non-root nodes on Android API < 34 (`BR-1`, `BR-3`).
+- [x] AC-3 — Given a newly confirmed sponsored Reel that schedules a delayed skip (`isSkipPending = true`), subsequent `com.instagram.android` accessibility events while the skip is pending do not trigger accessibility tree extraction (`shouldInspectSnapshot` returns `false`), whereas a non-target package event or Master Toggle OFF cancels the pending skip immediately; when the scheduled timer fires for any delay (`50..2000 ms`), the service verifies that the active root window is non-null with `packageName == "com.instagram.android"` before performing a bounded early-exit window inspection, and aborts without swiping if the foreground app changed, Reels context disappeared (e.g., Comments, Profile, or Home feed), or the sponsored indicator is no longer present (`INV-2`).
+- [x] AC-4 — Given positive display dimensions `(W, H)`, `SwipeGestureDispatcher` computes `centerX = 0.65f * W`, `startY = 0.78f * H`, `endY = 0.18f * H`, and `durationMs = 100L`, dispatches the upward gesture, opens the `700 ms` cooldown window and increments the persisted lifetime skip counter by `1` only in `onCompleted`, and clears pending/in-flight state without incrementing the counter on invalid bounds, cancellation, or dispatch failure (`BR-4`, `BR-7`, `INV-2`).
+- [x] AC-5 — Given the Compose dashboard (`HomeScreen`) across states `S-1`..`S-4`, the Skip Delay slider displays `150 ms` by default and adjusts across `50..2000 ms` in `50 ms` steps (`steps = 38`), verified by Robolectric Compose UI tests and headless screenshots for `S-1`, `S-2`, `S-3`, and `S-4`.
+- [x] AC-6 — Given the repository documentation and verification suite, `docs/domain.md` reflects the updated `Skip Delay` (`50 ms – 2000 ms`, default `150 ms`) and `Cooldown Window` (`700 ms`), all architecture/privacy boundaries (`INV-1`, `INV-2`) hold, and both `./scripts/check` and `./scripts/check --fast` exit `0`.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 |
+| Fix rounds | 2 |
+| Review findings: real / noise / deferred | 9 / 0 / 0 (Round 1: 6 / 0 / 0; Round 2: 3 / 0 / 0; Round 3: clean; Verify round 1: PASS) |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
