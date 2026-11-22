@@ -382,14 +382,24 @@ class SkipperAccessibilityServiceTest {
         val earlySnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, earlyExitTree)
         assertEquals(3, earlySnapshot.nodes.size)
 
-        // Total visited cap (400) stops traversal even when hidden nodes precede visible ad labels.
-        val invisibleFlood = Array(410) { idx -> node(text = "hidden-$idx", visible = false) } +
+        // Total visited cap (400): root + 397 hidden + Reels + Sponsored = 400 stops right after collecting Sponsored;
+        // 398 hidden stops at Reels (400th visit) before reaching Sponsored (401st).
+        val exactCapChildren = Array(397) { idx -> node(text = "hidden-$idx", visible = false) } +
             arrayOf(
                 node(text = "Reels", selected = true, clickable = true, visible = true),
                 node(text = "Sponsored", visible = true),
             )
-        val floodSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*invisibleFlood))
-        assertTrue(floodSnapshot.nodes.none { it.text == "Sponsored" })
+        val exactCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*exactCapChildren))
+        assertTrue(exactCapSnapshot.nodes.any { it.text == "Sponsored" })
+
+        val overCapChildren = Array(398) { idx -> node(text = "hidden-$idx", visible = false) } +
+            arrayOf(
+                node(text = "Reels", selected = true, clickable = true, visible = true),
+                node(text = "Sponsored", visible = true),
+            )
+        val overCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*overCapChildren))
+        assertTrue(overCapSnapshot.nodes.any { it.text == "Reels" })
+        assertTrue(overCapSnapshot.nodes.none { it.text == "Sponsored" })
 
         val dispatcher = SwipeGestureDispatcher()
         val spec = dispatcher.calculateSwipeSpec(screenWidth = 1080, screenHeight = 2400)

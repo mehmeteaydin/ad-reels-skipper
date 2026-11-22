@@ -2,7 +2,11 @@ package com.adreels.skipper.ui
 
 import android.graphics.Bitmap
 import android.provider.Settings
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -165,9 +169,19 @@ class HomeScreenTest {
 
         composeTestRule.onNodeWithText("Service Active").assertIsDisplayed()
         composeTestRule.onNodeWithText("12").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Adjustable from 50 ms to 2000 ms (50 ms steps)")
+            .performScrollTo()
+            .assertIsDisplayed()
 
         composeTestRule.onNodeWithTag(DashboardTags.SKIP_DELAY_SLIDER)
             .performScrollTo()
+            .assert(
+                SemanticsMatcher("Skip delay range 50..2000 ms with 38 steps") { node ->
+                    SemanticsProperties.ProgressBarRangeInfo in node.config &&
+                        node.config[SemanticsProperties.ProgressBarRangeInfo] ==
+                        ProgressBarRangeInfo(current = 150f, range = 50f..2000f, steps = 38)
+                },
+            )
             .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
                 setProgress(50f)
             }
@@ -183,6 +197,15 @@ class HomeScreenTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("600 ms").assertIsDisplayed()
         assertEquals(600L, fakeRepository.settingsFlow.value.skipDelayMs)
+
+        composeTestRule.onNodeWithTag(DashboardTags.SKIP_DELAY_SLIDER)
+            .performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(2000f)
+            }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("2000 ms").assertIsDisplayed()
+        assertEquals(2000L, fakeRepository.settingsFlow.value.skipDelayMs)
 
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_INPUT)
             .performScrollTo()
