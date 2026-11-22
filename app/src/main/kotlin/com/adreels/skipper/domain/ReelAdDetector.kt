@@ -28,8 +28,7 @@ class ReelAdDetector {
         if (isGestureInFlight || isSkipPending) {
             return false
         }
-        val lastSkip = lastSkipDispatchedAtMs
-        if (!isSkipPending && lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
+        if (isWithinCooldown(nowMs, config.cooldownMs)) {
             return false
         }
         val lastEval = lastEvaluatedAtMs
@@ -58,8 +57,7 @@ class ReelAdDetector {
         if (isGestureInFlight) {
             return SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE)
         }
-        val lastSkip = lastSkipDispatchedAtMs
-        if (!isSkipPending && lastSkip != null && nowMs - lastSkip in 0L until config.cooldownMs) {
+        if (!isSkipPending && isWithinCooldown(nowMs, config.cooldownMs)) {
             return SkipDecision.Ignore(IgnoreReason.COOLDOWN_ACTIVE)
         }
         val lastEval = lastEvaluatedAtMs
