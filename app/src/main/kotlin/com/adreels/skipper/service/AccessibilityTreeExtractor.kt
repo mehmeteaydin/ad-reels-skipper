@@ -125,6 +125,6 @@ class AccessibilityTreeExtractor(
 
     private companion object {
         const val INITIAL_CAPACITY = 64
-        const val MAX_TOTAL_VISITED = 400
+        const val MAX_TOTAL_VISITED = 2000
     }
 }
