@@ -7,13 +7,24 @@ import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.domain.KeywordValidationError
 import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.SkipperConfig
+import com.adreels.skipper.domain.WeeklySkipAggregator
+import com.adreels.skipper.domain.WeeklySkipRecord
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** Clock provider for active calendar week computation, overridable in Compose UI tests. */
+internal object DashboardClock {
+    @Volatile
+    var testingTodayOverride: (() -> LocalDate)? = null
+
+    fun today(): LocalDate = testingTodayOverride?.invoke() ?: LocalDate.now()
+}
 
 /** Unidirectional UI state backing the single-screen Material 3 Dashboard (`AC-4`..`AC-6`). */
 data class DashboardUiState(
@@ -25,43 +36,107 @@ data class DashboardUiState(
     val skippedReelsCount: Int = 0,
     val keywordInput: String = "",
     val keywordError: KeywordValidationError? = null,
+    val today: LocalDate = LocalDate.now(),
+    val currentWeek: WeeklySkipRecord = WeeklySkipAggregator.summarize(
+        dailyCounts = emptyMap(),
+        today = LocalDate.now(),
+    ).currentWeek,
+    val archivedWeeks: List<WeeklySkipRecord> = emptyList(),
+    val isHistoryDialogOpen: Boolean = false,
+    val selectedArchivedWeekStart: LocalDate? = null,
 )
 
-/** Manages persisted settings updates, keyword validation, and service permission state for UI. */
+/** Manages persisted settings updates, weekly skip summaries, keyword validation, and service permission state for UI. */
 class DashboardViewModel(
     private val repository: SkipperSettingsRepository,
     initialServiceEnabled: Boolean = false,
+    private val todayProvider: () -> LocalDate = DashboardClock::today,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(
-        DashboardUiState(
-            isServiceEnabled = initialServiceEnabled,
-            isMasterEnabled = repository.settingsFlow.value.isMasterEnabled,
-            skipDelayMs = repository.settingsFlow.value.skipDelayMs,
-            customKeywords = repository.settingsFlow.value.customKeywords.toList(),
-            skippedReelsCount = repository.settingsFlow.value.skippedReelsCount,
-        ),
-    )
+    private val stateLock = Any()
+    private var latestDailySkipCounts: Map<LocalDate, Int> = repository.settingsFlow.value.dailySkipCounts
+
+    private val _uiState = MutableStateFlow(buildInitialState(initialServiceEnabled))
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.settingsFlow.collect { settings ->
+                val activeToday = todayProvider()
+                val summary = WeeklySkipAggregator.summarize(
+                    dailyCounts = settings.dailySkipCounts,
+                    today = activeToday,
+                )
+                synchronized(stateLock) {
+                    latestDailySkipCounts = settings.dailySkipCounts
+                }
                 _uiState.update { current ->
                     current.copy(
                         isMasterEnabled = settings.isMasterEnabled,
                         skipDelayMs = settings.skipDelayMs,
                         customKeywords = settings.customKeywords.toList(),
                         skippedReelsCount = settings.skippedReelsCount,
+                        today = activeToday,
+                        currentWeek = summary.currentWeek,
+                        archivedWeeks = summary.archivedWeeks,
+                        selectedArchivedWeekStart = resolveSelectedArchiveWeek(
+                            currentSelection = current.selectedArchivedWeekStart,
+                            archivedWeeks = summary.archivedWeeks,
+                        ),
                     )
                 }
             }
         }
     }
 
-    /** Updates whether Android Accessibility Service permission is currently active. */
+    /** Updates permission status and refreshes active/archived weekly buckets for the current date (`onResume`). */
     fun refreshServiceStatus(isEnabled: Boolean) {
-        _uiState.update { it.copy(isServiceEnabled = isEnabled) }
+        val activeToday = todayProvider()
+        val dailyCounts = synchronized(stateLock) { latestDailySkipCounts }
+        val summary = WeeklySkipAggregator.summarize(
+            dailyCounts = dailyCounts,
+            today = activeToday,
+        )
+        _uiState.update { current ->
+            current.copy(
+                isServiceEnabled = isEnabled,
+                today = activeToday,
+                currentWeek = summary.currentWeek,
+                archivedWeeks = summary.archivedWeeks,
+                selectedArchivedWeekStart = resolveSelectedArchiveWeek(
+                    currentSelection = current.selectedArchivedWeekStart,
+                    archivedWeeks = summary.archivedWeeks,
+                ),
+            )
+        }
+    }
+
+    /** Opens the Past Weeks history dialog with the newest archived week pre-selected (`S-7`, `S-8`). */
+    fun openHistory() {
+        _uiState.update { current ->
+            current.copy(
+                isHistoryDialogOpen = true,
+                selectedArchivedWeekStart = current.archivedWeeks.firstOrNull()?.weekStart,
+            )
+        }
+    }
+
+    /** Closes the Past Weeks history dialog (`S-7`, `S-8`). */
+    fun closeHistory() {
+        _uiState.update { current ->
+            current.copy(isHistoryDialogOpen = false)
+        }
+    }
+
+    /** Selects an archived week in the Past Weeks detail breakdown (`S-8`). */
+    fun selectArchivedWeek(weekStart: LocalDate) {
+        _uiState.update { current ->
+            if (current.archivedWeeks.none { it.weekStart == weekStart }) {
+                current
+            } else {
+                current.copy(selectedArchivedWeekStart = weekStart)
+            }
+        }
     }
 
     /** Toggles automatic ad skipping (`BR-2`) and persists the updated state locally. */
@@ -120,6 +195,34 @@ class DashboardViewModel(
         }
     }
 
+    private fun buildInitialState(initialServiceEnabled: Boolean): DashboardUiState {
+        val settings = repository.settingsFlow.value
+        val activeToday = todayProvider()
+        val summary = WeeklySkipAggregator.summarize(
+            dailyCounts = settings.dailySkipCounts,
+            today = activeToday,
+        )
+        return DashboardUiState(
+            isServiceEnabled = initialServiceEnabled,
+            isMasterEnabled = settings.isMasterEnabled,
+            skipDelayMs = settings.skipDelayMs,
+            customKeywords = settings.customKeywords.toList(),
+            skippedReelsCount = settings.skippedReelsCount,
+            today = activeToday,
+            currentWeek = summary.currentWeek,
+            archivedWeeks = summary.archivedWeeks,
+            selectedArchivedWeekStart = summary.archivedWeeks.firstOrNull()?.weekStart,
+        )
+    }
+
+    private fun resolveSelectedArchiveWeek(
+        currentSelection: LocalDate?,
+        archivedWeeks: List<WeeklySkipRecord>,
+    ): LocalDate? {
+        return archivedWeeks.firstOrNull { it.weekStart == currentSelection }?.weekStart
+            ?: archivedWeeks.firstOrNull()?.weekStart
+    }
+
     private fun launchPersistence(block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
@@ -139,6 +242,7 @@ class DashboardViewModel(
         fun factory(
             repository: SkipperSettingsRepository,
             initialServiceEnabled: Boolean = false,
+            todayProvider: () -> LocalDate = DashboardClock::today,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -146,6 +250,7 @@ class DashboardViewModel(
                     return DashboardViewModel(
                         repository = repository,
                         initialServiceEnabled = initialServiceEnabled,
+                        todayProvider = todayProvider,
                     ) as T
                 }
             }

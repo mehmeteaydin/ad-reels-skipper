@@ -1,15 +1,21 @@
 package com.adreels.skipper.ui
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.provider.Settings
+import android.view.inspector.WindowInspector
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -31,6 +37,7 @@ import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
 import java.io.File
 import java.io.FileOutputStream
+import java.time.DayOfWeek
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -38,6 +45,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.ExternalResource
@@ -100,6 +108,7 @@ class HomeScreenTest {
 
     private val environmentRule = object : ExternalResource() {
         override fun before() {
+            DashboardClock.testingTodayOverride = null
             fakeRepository = InMemorySkipperSettingsRepository()
             fakeServiceEnabled = false
             SkipperSettingsRepositoryProvider.setForTesting(fakeRepository)
@@ -107,6 +116,7 @@ class HomeScreenTest {
         }
 
         override fun after() {
+            DashboardClock.testingTodayOverride = null
             AccessibilityServiceStatusChecker.setForTesting(null)
             SkipperSettingsRepositoryProvider.setForTesting(null)
         }
@@ -122,12 +132,46 @@ class HomeScreenTest {
         if (outputDirPath.isEmpty()) return
         composeTestRule.waitForIdle()
         val bitmap = composeTestRule.runOnIdle {
-            val decorView = composeTestRule.activity.window.decorView
-            assertTrue(decorView.width > 0 && decorView.height > 0)
-            Bitmap.createBitmap(decorView.width, decorView.height, Bitmap.Config.ARGB_8888).also { target ->
-                val canvas = android.graphics.Canvas(target)
-                decorView.draw(canvas)
+            val activityDecorView = composeTestRule.activity.window.decorView
+            assertTrue(activityDecorView.width > 0 && activityDecorView.height > 0)
+            val width = activityDecorView.width
+            val height = activityDecorView.height
+            val target = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(target)
+            activityDecorView.draw(canvas)
+
+            val windows = WindowInspector.getGlobalWindowViews()
+            if (windows.size > 1) {
+                val rootLoc = IntArray(2)
+                activityDecorView.getLocationOnScreen(rootLoc)
+                for (windowView in windows) {
+                    if (windowView === activityDecorView || windowView.width <= 0 || windowView.height <= 0) {
+                        continue
+                    }
+                    if (windowView.width < width || windowView.height < height) {
+                        canvas.drawColor(Color.argb(96, 0, 0, 0))
+                    }
+                    val viewLoc = IntArray(2)
+                    windowView.getLocationOnScreen(viewLoc)
+                    val rawDx = viewLoc[0] - rootLoc[0]
+                    val rawDy = viewLoc[1] - rootLoc[1]
+                    val dx = if (rawDx != 0 || rawDy != 0 || (windowView.width == width && windowView.height == height)) {
+                        rawDx.toFloat()
+                    } else {
+                        ((width - windowView.width) / 2f)
+                    }
+                    val dy = if (rawDx != 0 || rawDy != 0 || (windowView.width == width && windowView.height == height)) {
+                        rawDy.toFloat()
+                    } else {
+                        ((height - windowView.height) / 2f)
+                    }
+                    canvas.save()
+                    canvas.translate(dx, dy)
+                    windowView.draw(canvas)
+                    canvas.restore()
+                }
             }
+            target
         }
         val outputDir = File(outputDirPath).apply { mkdirs() }
         val outputFile = File(outputDir, fileName)
@@ -220,7 +264,7 @@ class HomeScreenTest {
             .performClick()
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithText("Reklam").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Reklam").performScrollTo().assertIsDisplayed()
         assertEquals(setOf("Reklam"), fakeRepository.settingsFlow.value.customKeywords)
 
         captureStateScreenshotIfRequested("S-2-service-active.png")
@@ -323,5 +367,176 @@ class HomeScreenTest {
         composeTestRule.onNodeWithTag(DashboardTags.KEYWORD_ERROR_TEXT).assertDoesNotExist()
         composeTestRule.onNodeWithText("İşbirliği").performScrollTo().assertIsDisplayed()
         assertEquals(setOf("İşbirliği"), fakeRepository.settingsFlow.value.customKeywords)
+    }
+
+    @Test
+    fun `renders state S-5 empty weekly activity card with zero daily counts and today highlighted`() {
+        fakeServiceEnabled = true
+        DashboardClock.testingTodayOverride = { LocalDate.of(2026, 11, 25) }
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_ACTIVITY_CARD)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Weekly Activity").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_RANGE_TEXT)
+            .assertTextEquals("Nov 23 \u2013 Nov 29")
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_TOTAL_TEXT)
+            .assertTextEquals("0 skipped")
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_HISTORY_BUTTON)
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.MONDAY))
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals("Mon: 0 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.WEDNESDAY))
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals("Wed (Today): 0 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.SUNDAY))
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals("Sun: 0 skipped reels")
+
+        captureStateScreenshotIfRequested("S-5-weekly-empty.png")
+    }
+
+    @Test
+    fun `renders state S-6 weekly activity with skips and resets active week to zero on Monday resume`() {
+        fakeServiceEnabled = true
+        var fakeToday = LocalDate.of(2026, 11, 25)
+        DashboardClock.testingTodayOverride = { fakeToday }
+        runBlocking {
+            repeat(2) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 23)) }
+            repeat(5) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 25)) }
+        }
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_ACTIVITY_CARD)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_RANGE_TEXT)
+            .assertTextEquals("Nov 23 \u2013 Nov 29")
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_TOTAL_TEXT)
+            .assertTextEquals("7 skipped")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.MONDAY))
+            .assertContentDescriptionEquals("Mon: 2 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.WEDNESDAY))
+            .assertContentDescriptionEquals("Wed (Today): 5 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.FRIDAY))
+            .assertContentDescriptionEquals("Fri: 0 skipped reels")
+
+        captureStateScreenshotIfRequested("S-6-weekly-populated.png")
+
+        fakeToday = LocalDate.of(2026, 11, 30)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_RANGE_TEXT)
+            .assertTextEquals("Nov 30 \u2013 Dec 6")
+        composeTestRule.onNodeWithTag(DashboardTags.WEEKLY_TOTAL_TEXT)
+            .assertTextEquals("0 skipped")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.MONDAY))
+            .assertContentDescriptionEquals("Mon (Today): 0 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.weeklyDayBar(DayOfWeek.WEDNESDAY))
+            .assertContentDescriptionEquals("Wed: 0 skipped reels")
+        composeTestRule.onNodeWithText("7").assertIsDisplayed()
+    }
+
+    @Test
+    fun `renders state S-7 empty past weeks history dialog excluding active week and closes cleanly`() {
+        fakeServiceEnabled = true
+        DashboardClock.testingTodayOverride = { LocalDate.of(2026, 11, 25) }
+        runBlocking {
+            repeat(2) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 25)) }
+        }
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_HISTORY_BUTTON)
+            .performScrollTo()
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_DIALOG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Past Weeks").assertIsDisplayed()
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_EMPTY_TEXT).assertIsDisplayed()
+        composeTestRule.onNodeWithText("No past weeks recorded yet.").assertIsDisplayed()
+
+        captureStateScreenshotIfRequested("S-7-history-empty.png")
+
+        composeTestRule.onNodeWithTag(DashboardTags.CLOSE_HISTORY_BUTTON).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_DIALOG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `renders state S-8 past weeks archive newest-first excludes active and gap weeks and switches detail`() {
+        fakeServiceEnabled = true
+        DashboardClock.testingTodayOverride = { LocalDate.of(2026, 11, 25) }
+        runBlocking {
+            // Two archived weeks separated by an empty gap week (Nov 9 - Nov 15), plus active week skips.
+            fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 3))
+            repeat(4) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 6)) }
+            repeat(3) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 16)) }
+            repeat(5) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 19)) }
+            repeat(2) { fakeRepository.incrementSkippedReelsCount(LocalDate.of(2026, 11, 23)) }
+        }
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+        composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_HISTORY_BUTTON)
+            .performScrollTo()
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        val newestArchiveStart = LocalDate.of(2026, 11, 16)
+        val olderArchiveStart = LocalDate.of(2026, 11, 2)
+        val emptyGapWeekStart = LocalDate.of(2026, 11, 9)
+        val activeWeekStart = LocalDate.of(2026, 11, 23)
+
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_DIALOG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_EMPTY_TEXT).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(DashboardTags.archivedWeekRow(activeWeekStart)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(DashboardTags.archivedWeekRow(emptyGapWeekStart)).assertDoesNotExist()
+
+        val newestRow = composeTestRule.onNodeWithTag(DashboardTags.archivedWeekRow(newestArchiveStart))
+        val olderRow = composeTestRule.onNodeWithTag(DashboardTags.archivedWeekRow(olderArchiveStart))
+        newestRow.assertIsDisplayed().assertIsSelected()
+        olderRow.assertIsDisplayed()
+        assertTrue(
+            newestRow.fetchSemanticsNode().boundsInRoot.top < olderRow.fetchSemanticsNode().boundsInRoot.top,
+            "Expected newest archived week row to appear above older archived week rows",
+        )
+
+        composeTestRule.onNodeWithTag(DashboardTags.ARCHIVED_DETAIL_RANGE_TEXT)
+            .assertTextEquals("Nov 16 \u2013 Nov 22")
+        composeTestRule.onNodeWithTag(DashboardTags.archivedDayBar(DayOfWeek.MONDAY))
+            .assertContentDescriptionEquals("Mon: 3 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.archivedDayBar(DayOfWeek.THURSDAY))
+            .assertContentDescriptionEquals("Thu: 5 skipped reels")
+
+        captureStateScreenshotIfRequested("S-8-history-archive.png")
+
+        olderRow.performClick()
+        composeTestRule.waitForIdle()
+
+        olderRow.assertIsSelected()
+        composeTestRule.onNodeWithTag(DashboardTags.ARCHIVED_DETAIL_RANGE_TEXT)
+            .assertTextEquals("Nov 2 \u2013 Nov 8")
+        composeTestRule.onNodeWithTag(DashboardTags.archivedDayBar(DayOfWeek.TUESDAY))
+            .assertContentDescriptionEquals("Tue: 1 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.archivedDayBar(DayOfWeek.FRIDAY))
+            .assertContentDescriptionEquals("Fri: 4 skipped reels")
+        composeTestRule.onNodeWithTag(DashboardTags.archivedDayBar(DayOfWeek.MONDAY))
+            .assertContentDescriptionEquals("Mon: 0 skipped reels")
+
+        composeTestRule.onNodeWithTag(DashboardTags.CLOSE_HISTORY_BUTTON).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(DashboardTags.HISTORY_DIALOG).assertDoesNotExist()
     }
 }
