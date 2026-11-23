@@ -253,13 +253,13 @@ class SkipperAccessibilityServiceTest {
         val gesture = dispatched.description()
         assertEquals(1, gesture.strokeCount)
         val stroke = gesture.getStroke(0)
-        assertEquals(100L, stroke.duration)
+        assertEquals(150L, stroke.duration)
         val strokePoints = Shadows.shadowOf(stroke.path).points
         assertEquals(2, strokePoints.size)
-        assertEquals(702f, strokePoints[0].x, absoluteTolerance = 0.01f)
+        assertEquals(594f, strokePoints[0].x, absoluteTolerance = 0.01f)
         assertEquals(strokePoints[0].x, strokePoints[1].x)
-        assertEquals(1872f, strokePoints[0].y, absoluteTolerance = 0.01f)
-        assertEquals(432f, strokePoints[1].y, absoluteTolerance = 0.01f)
+        assertEquals(1728f, strokePoints[0].y, absoluteTolerance = 0.01f)
+        assertEquals(480f, strokePoints[1].y, absoluteTolerance = 0.01f)
         dispatched.callback()?.onCompleted(gesture)
 
         fakeClockMs += 500L
@@ -359,7 +359,7 @@ class SkipperAccessibilityServiceTest {
     }
 
     @Test
-    fun `caps visible node extraction at 160, total visited at 400, stops early on ad match, and verifies swipe geometry`() {
+    fun `caps visible labeled extraction at 160, skips unlabeled containers, caps total visited at 2000, stops early, and verifies swipe geometry`() {
         val extractor = AccessibilityTreeExtractor(maxVisibleNodes = 160)
         val children = arrayOf(
             node(text = "Sponsored", visible = false),
@@ -373,6 +373,31 @@ class SkipperAccessibilityServiceTest {
         assertTrue(snapshot.nodes.none { it.text == "Sponsored" || it.text == "Reels" })
         assertTrue(extractor.extract(SkipperConfig.TARGET_PACKAGE, null).nodes.isEmpty())
 
+        // Regression test: 250+ visible unlabeled/whitespace layout containers must NOT exhaust the 160-node budget.
+        val unlabeledWrappers = Array(200) { node(text = null, contentDescription = null, visible = true) } +
+            Array(50) { node(text = "   ", contentDescription = "", visible = true) }
+        val deepWrapper = node(text = null, contentDescription = null, visible = true).also { wrapper ->
+            Shadows.shadowOf(wrapper).addChild(node(text = "Sponsorlu", visible = true))
+        }
+        val unlabeledHeavyTree = treeWith(
+            *unlabeledWrappers,
+            node(text = "Reels", selected = true, clickable = true, visible = true),
+            deepWrapper,
+        )
+        val unlabeledHeavySnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, unlabeledHeavyTree)
+        assertEquals(listOf("Reels", "Sponsorlu"), unlabeledHeavySnapshot.nodes.map { it.text })
+
+        service.activeRootProvider = {
+            treeWith(
+                *Array(250) { node(text = null, contentDescription = null, visible = true) },
+                node(text = "Reels", selected = true, clickable = true, visible = true),
+                node(text = "Sponsorlu", visible = true),
+            )
+        }
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertEquals(150L, scheduler.scheduledDelayMs)
+        assertNotNull(scheduler.pendingAction)
+
         // Early exit stops immediately once Reels context and a matching keyword are both observed.
         val earlyExitTree = treeWith(
             node(text = "Reels", selected = true, clickable = true),
@@ -380,11 +405,11 @@ class SkipperAccessibilityServiceTest {
             *Array(50) { idx -> node(text = "trailing-node-$idx", visible = true) },
         )
         val earlySnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, earlyExitTree)
-        assertEquals(3, earlySnapshot.nodes.size)
+        assertEquals(2, earlySnapshot.nodes.size)
 
-        // Total visited cap (400): root + 397 hidden + Reels + Sponsored = 400 stops right after collecting Sponsored;
-        // 398 hidden stops at Reels (400th visit) before reaching Sponsored (401st).
-        val exactCapChildren = Array(397) { idx -> node(text = "hidden-$idx", visible = false) } +
+        // Total visited cap (2000): root + 1997 hidden + Reels + Sponsored = 2000 collects Sponsored;
+        // 1998 hidden stops at Reels (2000th visit) before reaching Sponsored (2001st).
+        val exactCapChildren = Array(1997) { idx -> node(text = "hidden-$idx", visible = false) } +
             arrayOf(
                 node(text = "Reels", selected = true, clickable = true, visible = true),
                 node(text = "Sponsored", visible = true),
@@ -392,26 +417,26 @@ class SkipperAccessibilityServiceTest {
         val exactCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, treeWith(*exactCapChildren))
         assertTrue(exactCapSnapshot.nodes.any { it.text == "Sponsored" })
 
-        val nodeAt400 = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true).addTrackedChild(
-            TrackingNode(textValue = "Unqueried child at 400 cap"),
+        val nodeAt2000 = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true).addTrackedChild(
+            TrackingNode(textValue = "Unqueried child at 2000 cap"),
         )
         val overCapRoot = TrackingNode(textValue = "root").addTrackedChild(
-            *Array<AccessibilityNodeInfo>(398) { idx -> node(text = "hidden-$idx", visible = false) },
-            nodeAt400,
+            *Array<AccessibilityNodeInfo>(1998) { idx -> node(text = "hidden-$idx", visible = false) },
+            nodeAt2000,
             node(text = "Sponsored", visible = true),
         )
         val overCapSnapshot = AccessibilityTreeExtractor().extract(SkipperConfig.TARGET_PACKAGE, overCapRoot)
         assertTrue(overCapSnapshot.nodes.any { it.text == "Reels" })
         assertTrue(overCapSnapshot.nodes.none { it.text == "Sponsored" })
-        assertEquals(0, nodeAt400.childQueries)
+        assertEquals(0, nodeAt2000.childQueries)
 
         val dispatcher = SwipeGestureDispatcher()
         val spec = dispatcher.calculateSwipeSpec(screenWidth = 1080, screenHeight = 2400)
         assertNotNull(spec)
-        assertEquals(702f, spec.centerX, absoluteTolerance = 0.01f)
-        assertEquals(1872f, spec.startY, absoluteTolerance = 0.01f)
-        assertEquals(432f, spec.endY, absoluteTolerance = 0.01f)
-        assertEquals(100L, spec.durationMs)
+        assertEquals(594f, spec.centerX, absoluteTolerance = 0.01f)
+        assertEquals(1728f, spec.startY, absoluteTolerance = 0.01f)
+        assertEquals(480f, spec.endY, absoluteTolerance = 0.01f)
+        assertEquals(150L, spec.durationMs)
         assertNull(dispatcher.calculateSwipeSpec(screenWidth = 0, screenHeight = 2400))
         assertNull(dispatcher.calculateSwipeSpec(screenWidth = 1080, screenHeight = 0))
     }
@@ -566,7 +591,7 @@ class SkipperAccessibilityServiceTest {
         val firstDispatch = shadowService.gesturesDispatched.single()
         firstDispatch.callback()?.onCancelled(firstDispatch.description())
 
-        // Should not wait 700 ms cooldown after cancellation; resumes once 120 ms throttle passes.
+        // Should not wait 700 ms cooldown after cancellation; resumes once 180 ms throttle passes.
         fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
@@ -586,6 +611,7 @@ class SkipperAccessibilityServiceTest {
     @Config(sdk = [33])
     fun `recycles root, child, and early-exit queued accessibility nodes safely on API 33`() {
         val extractorReels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
+        val extractorUnlabeled = TrackingNode(textValue = null, contentDescriptionValue = null)
         val extractorSponsored = TrackingNode(textValue = "Sponsored").addTrackedChild(
             TrackingNode(textValue = "Never queried child"),
         )
@@ -593,6 +619,7 @@ class SkipperAccessibilityServiceTest {
         val extractorSibling2 = TrackingNode(textValue = "Queued sibling 2")
         val earlyTree = TrackingNode(textValue = "root").addTrackedChild(
             extractorReels,
+            extractorUnlabeled,
             extractorSponsored,
             extractorSibling1,
             extractorSibling2,
@@ -601,6 +628,7 @@ class SkipperAccessibilityServiceTest {
         assertEquals(3, earlySnapshot.nodes.size)
         assertEquals(0, earlyTree.recycleCalls)
         assertEquals(1, extractorReels.recycleCalls)
+        assertEquals(1, extractorUnlabeled.recycleCalls)
         assertEquals(1, extractorSponsored.recycleCalls)
         assertEquals(0, extractorSponsored.childQueries)
         assertEquals(1, extractorSibling1.recycleCalls)
@@ -610,10 +638,10 @@ class SkipperAccessibilityServiceTest {
         service.activeRootProvider = {
             val reels = TrackingNode(textValue = "Reels", selectedValue = true, clickableValue = true)
             val sponsored = TrackingNode(textValue = "Sponsored")
-            val container = TrackingNode(textValue = "Container").addTrackedChild(sponsored)
+            val unlabeledContainer = TrackingNode(textValue = null, contentDescriptionValue = null).addTrackedChild(sponsored)
             val trailing = TrackingNode(textValue = "Remaining trailing node")
-            val root = TrackingNode(textValue = "root").addTrackedChild(reels, container, trailing)
-            capturedNodes.addAll(listOf(root, reels, container, sponsored, trailing))
+            val root = TrackingNode(textValue = "root").addTrackedChild(reels, unlabeledContainer, trailing)
+            capturedNodes.addAll(listOf(root, reels, unlabeledContainer, sponsored, trailing))
             root
         }
 
@@ -694,7 +722,7 @@ class SkipperAccessibilityServiceTest {
         assertEquals(KeywordValidationResult.Valid("Reklam"), settingsRepository.addCustomKeyword("Reklam"))
         settingsRepository.setSkipDelayMs(650L)
 
-        fakeClockMs += 150L
+        fakeClockMs += 200L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
         assertEquals(650L, scheduler.scheduledDelayMs)
@@ -707,7 +735,7 @@ class SkipperAccessibilityServiceTest {
         // Re-enable toggle and complete one upward swipe -> counter increments to 1.
         settingsRepository.setMasterEnabled(true)
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        fakeClockMs += 150L
+        fakeClockMs += 200L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
 

@@ -9,15 +9,16 @@ import com.adreels.skipper.domain.WindowSnapshot
 
 /**
  * Extracts a bounded, visibility-filtered [WindowSnapshot] from an Android accessibility tree
- * with early-exit termination once Reels context and an active ad keyword match are confirmed,
- * without logging or persisting inspected screen text.
+ * without consuming [maxVisibleNodes] on unlabeled layout containers and with early-exit termination
+ * once Reels context and an active ad keyword match are confirmed, without logging or persisting screen text.
  */
 class AccessibilityTreeExtractor(
     private val maxVisibleNodes: Int = SkipperConfig.DEFAULT_MAX_VISIBLE_NODES,
 ) {
     /**
-     * Traverses [root] iteratively, collecting up to `maxVisibleNodes` visible nodes and stopping
-     * early as soon as both active Reels context and any keyword in [keywords] match.
+     * Traverses [root] iteratively, collecting up to `maxVisibleNodes` visible labeled nodes
+     * (skipping unlabeled layout containers from the visible budget) and stopping early as soon as
+     * both active Reels context and any keyword in [keywords] match.
      */
     fun extract(
         packageName: String?,
@@ -46,14 +47,8 @@ class AccessibilityTreeExtractor(
                 visitedCount++
                 var matchedBoth = false
                 try {
-                    if (current.isVisibleToUser) {
-                        val visibleNode = VisibleNode(
-                            text = current.text?.toString(),
-                            contentDescription = current.contentDescription?.toString(),
-                            isVisibleToUser = true,
-                            isSelected = current.isSelected,
-                            isClickable = current.isClickable,
-                        )
+                    val visibleNode = toVisibleLabeledNode(current)
+                    if (visibleNode != null) {
                         visibleNodes.add(visibleNode)
                         val textTokens = visibleNode.text
                             ?.let(ReelAdDetector.Companion::normalizeTokens)
@@ -70,10 +65,7 @@ class AccessibilityTreeExtractor(
                         matchedBoth = hasReelsContext && hasSponsoredLabel
                     }
                     if (!matchedBoth && visibleNodes.size < maxVisibleNodes && visitedCount < MAX_TOTAL_VISITED) {
-                        val childCount = current.childCount
-                        for (i in 0 until childCount) {
-                            current.getChild(i)?.let(queue::addLast)
-                        }
+                        enqueueChildren(current, queue)
                     }
                 } finally {
                     if (current !== root) {
@@ -96,6 +88,30 @@ class AccessibilityTreeExtractor(
         return WindowSnapshot(packageName = packageName, nodes = visibleNodes)
     }
 
+    private fun toVisibleLabeledNode(node: AccessibilityNodeInfo): VisibleNode? {
+        if (!node.isVisibleToUser) return null
+        val rawText = node.text?.toString()
+        val rawDesc = node.contentDescription?.toString()
+        if (rawText.isNullOrBlank() && rawDesc.isNullOrBlank()) return null
+        return VisibleNode(
+            text = rawText,
+            contentDescription = rawDesc,
+            isVisibleToUser = true,
+            isSelected = node.isSelected,
+            isClickable = node.isClickable,
+        )
+    }
+
+    private fun enqueueChildren(
+        node: AccessibilityNodeInfo,
+        queue: ArrayDeque<AccessibilityNodeInfo>,
+    ) {
+        val childCount = node.childCount
+        for (i in 0 until childCount) {
+            node.getChild(i)?.let(queue::addLast)
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun safeRecycle(node: AccessibilityNodeInfo) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -109,6 +125,6 @@ class AccessibilityTreeExtractor(
 
     private companion object {
         const val INITIAL_CAPACITY = 64
-        const val MAX_TOTAL_VISITED = 400
+        const val MAX_TOTAL_VISITED = 2000
     }
 }

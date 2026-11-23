@@ -1,6 +1,6 @@
 # Spec 0006 — Reliable Reels Tree Traversal and Smooth Swipe Tuning (mini)
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0006-plan.md`
 - Self-critique: done

@@ -13,7 +13,7 @@ data class SkipperConfig(
 ) {
     companion object {
         const val TARGET_PACKAGE: String = "com.instagram.android"
-        const val DEFAULT_THROTTLE_INTERVAL_MS: Long = 120L
+        const val DEFAULT_THROTTLE_INTERVAL_MS: Long = 180L
         const val DEFAULT_SKIP_DELAY_MS: Long = 150L
         const val MIN_SKIP_DELAY_MS: Long = 50L
         const val MAX_SKIP_DELAY_MS: Long = 2000L

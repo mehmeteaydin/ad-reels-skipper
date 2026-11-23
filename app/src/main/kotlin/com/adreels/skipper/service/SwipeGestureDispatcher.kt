@@ -13,7 +13,7 @@ data class SwipeSpec(
 )
 
 /**
- * Computes fail-safe swipe geometry (`X = 65%`, `Y = 78% -> 18%`, `100 ms`) and dispatches gestures
+ * Computes fail-safe swipe geometry (`X = 55%`, `Y = 72% -> 20%`, `150 ms`) and dispatches gestures
  * through [AccessibilityService.dispatchGesture].
  */
 open class SwipeGestureDispatcher {
@@ -79,9 +79,9 @@ open class SwipeGestureDispatcher {
     }
 
     companion object {
-        const val HORIZONTAL_CENTER_RATIO: Float = 0.65f
-        const val START_Y_RATIO: Float = 0.78f
-        const val END_Y_RATIO: Float = 0.18f
-        const val SWIPE_DURATION_MS: Long = 100L
+        const val HORIZONTAL_CENTER_RATIO: Float = 0.55f
+        const val START_Y_RATIO: Float = 0.72f
+        const val END_Y_RATIO: Float = 0.20f
+        const val SWIPE_DURATION_MS: Long = 150L
     }
 }
