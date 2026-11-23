@@ -1,6 +1,6 @@
 # Spec 0007 — Weekly Daily Skip History and Archive View
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0007-plan.md`
 - Self-critique: done
