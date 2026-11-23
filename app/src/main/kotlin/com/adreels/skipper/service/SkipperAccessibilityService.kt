@@ -16,6 +16,7 @@ import com.adreels.skipper.domain.SkipDecision
 import com.adreels.skipper.domain.SkipperConfig
 import com.adreels.skipper.domain.WindowSnapshot
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -58,6 +59,7 @@ internal class HandlerDelayScheduler : DelayScheduler {
 class SkipperAccessibilityService : AccessibilityService() {
 
     internal var clockMs: () -> Long = { SystemClock.uptimeMillis() }
+    internal var todayProvider: () -> LocalDate = { LocalDate.now() }
     internal var delayScheduler: DelayScheduler = HandlerDelayScheduler()
     internal var detector: ReelAdDetector = ReelAdDetector()
     internal var treeExtractor: AccessibilityTreeExtractor = AccessibilityTreeExtractor()
@@ -210,9 +212,10 @@ class SkipperAccessibilityService : AccessibilityService() {
     }
 
     private fun recordCompletedSkip() {
+        val completedDate = todayProvider()
         ensureServiceScope().launch {
             try {
-                settingsRepositoryProvider().incrementSkippedReelsCount()
+                settingsRepositoryProvider().incrementSkippedReelsCount(completedDate)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: IOException) {

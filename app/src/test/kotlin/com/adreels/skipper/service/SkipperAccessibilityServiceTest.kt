@@ -11,6 +11,7 @@ import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
 import java.io.IOException
+import java.time.LocalDate
 import java.util.Collections
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -29,75 +30,168 @@ import org.robolectric.Robolectric
 import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
+private class RecordingDelayScheduler : DelayScheduler {
+    var scheduledDelayMs: Long? = null
+    var pendingAction: (() -> Unit)? = null
+    var cancelCount: Int = 0
+
+    override fun schedule(delayMs: Long, action: () -> Unit) {
+        scheduledDelayMs = delayMs
+        pendingAction = action
+    }
+
+    override fun cancelAll() {
+        cancelCount++
+        pendingAction = null
+    }
+
+    fun firePending() {
+        val action = pendingAction ?: error("No pending skip action scheduled")
+        pendingAction = null
+        action.invoke()
+    }
+}
+
+private class FakeSkipperSettingsRepository : SkipperSettingsRepository {
+    private val mutableSettings = MutableStateFlow(SkipperSettings())
+    override val settingsFlow: StateFlow<SkipperSettings> = mutableSettings.asStateFlow()
+    var incrementException: Throwable? = null
+    val incrementedDates = mutableListOf<LocalDate>()
+
+    override suspend fun setMasterEnabled(enabled: Boolean) {
+        mutableSettings.value = mutableSettings.value.copy(isMasterEnabled = enabled)
+    }
+
+    override suspend fun setSkipDelayMs(delayMs: Long) {
+        mutableSettings.value = mutableSettings.value.copy(
+            skipDelayMs = SkipperConfig.clampSkipDelay(delayMs),
+        )
+    }
+
+    override suspend fun addCustomKeyword(rawKeyword: String): KeywordValidationResult {
+        val result = KeywordValidator.validateCustomKeyword(
+            raw = rawKeyword,
+            existingCustomKeywords = mutableSettings.value.customKeywords,
+        )
+        if (result is KeywordValidationResult.Valid) {
+            mutableSettings.value = mutableSettings.value.copy(
+                customKeywords = mutableSettings.value.customKeywords + result.trimmedKeyword,
+            )
+        }
+        return result
+    }
+
+    override suspend fun removeCustomKeyword(keyword: String): Boolean {
+        if (KeywordValidator.isBuiltInKeyword(keyword)) return false
+        val current = mutableSettings.value.customKeywords
+        val updated = current - keyword
+        mutableSettings.value = mutableSettings.value.copy(customKeywords = updated)
+        return updated.size != current.size
+    }
+
+    override suspend fun incrementSkippedReelsCount(date: LocalDate) {
+        incrementException?.let { throw it }
+        incrementedDates.add(date)
+        val updatedCount = (mutableSettings.value.dailySkipCounts[date] ?: 0) + 1
+        mutableSettings.value = mutableSettings.value.copy(
+            skippedReelsCount = mutableSettings.value.skippedReelsCount + 1,
+            dailySkipCounts = mutableSettings.value.dailySkipCounts + (date to updatedCount),
+        )
+    }
+}
+
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+private class TrackingNode(
+    private val packageNameValue: CharSequence? = SkipperConfig.TARGET_PACKAGE,
+    private val textValue: CharSequence? = null,
+    private val contentDescriptionValue: CharSequence? = null,
+    private val visibleValue: Boolean = true,
+    private val selectedValue: Boolean = false,
+    private val clickableValue: Boolean = false,
+    private val throwOnPackageName: Boolean = false,
+) : AccessibilityNodeInfo() {
+    private val childNodes = mutableListOf<AccessibilityNodeInfo>()
+    var childQueries: Int = 0
+        private set
+    var recycleCalls: Int = 0
+        private set
+
+    fun addTrackedChild(vararg children: AccessibilityNodeInfo): TrackingNode {
+        childNodes.addAll(children)
+        return this
+    }
+
+    override fun getPackageName(): CharSequence? {
+        check(!throwOnPackageName) { "Dead binder" }
+        return packageNameValue
+    }
+
+    override fun getText(): CharSequence? = textValue
+    override fun getContentDescription(): CharSequence? = contentDescriptionValue
+    override fun isVisibleToUser(): Boolean = visibleValue
+    override fun isSelected(): Boolean = selectedValue
+    override fun isClickable(): Boolean = clickableValue
+
+    override fun getChildCount(): Int {
+        childQueries++
+        return childNodes.size
+    }
+
+    override fun getChild(index: Int): AccessibilityNodeInfo? {
+        childQueries++
+        return childNodes.getOrNull(index)
+    }
+
+    override fun recycle() {
+        recycleCalls++
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun instagramEvent(packageName: CharSequence?): AccessibilityEvent {
+    return AccessibilityEvent.obtain().apply {
+        eventType = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        this.packageName = packageName
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun node(
+    text: String? = null,
+    contentDescription: String? = null,
+    visible: Boolean = true,
+    selected: Boolean = false,
+    clickable: Boolean = false,
+): AccessibilityNodeInfo {
+    return AccessibilityNodeInfo.obtain().apply {
+        this.packageName = SkipperConfig.TARGET_PACKAGE
+        this.text = text
+        this.contentDescription = contentDescription
+        this.isVisibleToUser = visible
+        this.isSelected = selected
+        this.isClickable = clickable
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun treeWith(
+    vararg children: AccessibilityNodeInfo,
+    packageName: String = SkipperConfig.TARGET_PACKAGE,
+): AccessibilityNodeInfo {
+    val root = AccessibilityNodeInfo.obtain().apply {
+        this.packageName = packageName
+        isVisibleToUser = true
+    }
+    val shadowRoot = Shadows.shadowOf(root)
+    for (child in children) {
+        shadowRoot.addChild(child)
+    }
+    return root
+}
+
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35])
 class SkipperAccessibilityServiceTest {
-
-    private class RecordingDelayScheduler : DelayScheduler {
-        var scheduledDelayMs: Long? = null
-        var pendingAction: (() -> Unit)? = null
-        var cancelCount: Int = 0
-
-        override fun schedule(delayMs: Long, action: () -> Unit) {
-            scheduledDelayMs = delayMs
-            pendingAction = action
-        }
-
-        override fun cancelAll() {
-            cancelCount++
-            pendingAction = null
-        }
-
-        fun firePending() {
-            val action = pendingAction ?: error("No pending skip action scheduled")
-            pendingAction = null
-            action.invoke()
-        }
-    }
-
-    private class FakeSkipperSettingsRepository : SkipperSettingsRepository {
-        private val mutableSettings = MutableStateFlow(SkipperSettings())
-        override val settingsFlow: StateFlow<SkipperSettings> = mutableSettings.asStateFlow()
-        var incrementException: Throwable? = null
-
-        override suspend fun setMasterEnabled(enabled: Boolean) {
-            mutableSettings.value = mutableSettings.value.copy(isMasterEnabled = enabled)
-        }
-
-        override suspend fun setSkipDelayMs(delayMs: Long) {
-            mutableSettings.value = mutableSettings.value.copy(
-                skipDelayMs = SkipperConfig.clampSkipDelay(delayMs),
-            )
-        }
-
-        override suspend fun addCustomKeyword(rawKeyword: String): KeywordValidationResult {
-            val result = KeywordValidator.validateCustomKeyword(
-                raw = rawKeyword,
-                existingCustomKeywords = mutableSettings.value.customKeywords,
-            )
-            if (result is KeywordValidationResult.Valid) {
-                mutableSettings.value = mutableSettings.value.copy(
-                    customKeywords = mutableSettings.value.customKeywords + result.trimmedKeyword,
-                )
-            }
-            return result
-        }
-
-        override suspend fun removeCustomKeyword(keyword: String): Boolean {
-            if (KeywordValidator.isBuiltInKeyword(keyword)) return false
-            val current = mutableSettings.value.customKeywords
-            val updated = current - keyword
-            mutableSettings.value = mutableSettings.value.copy(customKeywords = updated)
-            return updated.size != current.size
-        }
-
-        override suspend fun incrementSkippedReelsCount() {
-            incrementException?.let { throw it }
-            mutableSettings.value = mutableSettings.value.copy(
-                skippedReelsCount = mutableSettings.value.skippedReelsCount + 1,
-            )
-        }
-    }
 
     private lateinit var service: SkipperAccessibilityService
     private lateinit var scheduler: RecordingDelayScheduler
@@ -120,92 +214,6 @@ class SkipperAccessibilityServiceTest {
     @After
     fun tearDown() {
         SkipperSettingsRepositoryProvider.setForTesting(null)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun instagramEvent(packageName: CharSequence?): AccessibilityEvent {
-        return AccessibilityEvent.obtain().apply {
-            eventType = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            this.packageName = packageName
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun node(
-        text: String? = null,
-        contentDescription: String? = null,
-        visible: Boolean = true,
-        selected: Boolean = false,
-        clickable: Boolean = false,
-    ): AccessibilityNodeInfo {
-        return AccessibilityNodeInfo.obtain().apply {
-            this.packageName = SkipperConfig.TARGET_PACKAGE
-            this.text = text
-            this.contentDescription = contentDescription
-            this.isVisibleToUser = visible
-            this.isSelected = selected
-            this.isClickable = clickable
-        }
-    }
-
-    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-    private class TrackingNode(
-        private val packageNameValue: CharSequence? = SkipperConfig.TARGET_PACKAGE,
-        private val textValue: CharSequence? = null,
-        private val contentDescriptionValue: CharSequence? = null,
-        private val visibleValue: Boolean = true,
-        private val selectedValue: Boolean = false,
-        private val clickableValue: Boolean = false,
-        private val throwOnPackageName: Boolean = false,
-    ) : AccessibilityNodeInfo() {
-        private val childNodes = mutableListOf<AccessibilityNodeInfo>()
-        var childQueries: Int = 0
-            private set
-        var recycleCalls: Int = 0
-            private set
-
-        fun addTrackedChild(vararg children: AccessibilityNodeInfo): TrackingNode {
-            childNodes.addAll(children)
-            return this
-        }
-
-        override fun getPackageName(): CharSequence? {
-            check(!throwOnPackageName) { "Dead binder" }
-            return packageNameValue
-        }
-
-        override fun getText(): CharSequence? = textValue
-        override fun getContentDescription(): CharSequence? = contentDescriptionValue
-        override fun isVisibleToUser(): Boolean = visibleValue
-        override fun isSelected(): Boolean = selectedValue
-        override fun isClickable(): Boolean = clickableValue
-
-        override fun getChildCount(): Int {
-            childQueries++
-            return childNodes.size
-        }
-
-        override fun getChild(index: Int): AccessibilityNodeInfo? {
-            childQueries++
-            return childNodes.getOrNull(index)
-        }
-
-        override fun recycle() {
-            recycleCalls++
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun treeWith(vararg children: AccessibilityNodeInfo, packageName: String = SkipperConfig.TARGET_PACKAGE): AccessibilityNodeInfo {
-        val root = AccessibilityNodeInfo.obtain().apply {
-            this.packageName = packageName
-            isVisibleToUser = true
-        }
-        val shadowRoot = Shadows.shadowOf(root)
-        for (child in children) {
-            shadowRoot.addChild(child)
-        }
-        return root
     }
 
     @Test
@@ -699,6 +707,8 @@ class SkipperAccessibilityServiceTest {
 
     @Test
     fun `observes live repository config updates and increments skip counter only on completed swipe`() = runBlocking {
+        var currentLocalDate = LocalDate.of(2026, 11, 25)
+        service.todayProvider = { currentLocalDate }
         service.startObservingSettings()
 
         var phase = "custom_ad"
@@ -732,7 +742,7 @@ class SkipperAccessibilityServiceTest {
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertNull(scheduler.pendingAction)
 
-        // Re-enable toggle and complete one upward swipe -> counter increments to 1.
+        // Re-enable toggle and complete one upward swipe -> counter and daily count increment to 1.
         settingsRepository.setMasterEnabled(true)
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         fakeClockMs += 200L
@@ -746,8 +756,9 @@ class SkipperAccessibilityServiceTest {
         val firstGesture = shadowService.gesturesDispatched[0]
         firstGesture.callback()?.onCompleted(firstGesture.description())
         assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+        assertEquals(mapOf(LocalDate.of(2026, 11, 25) to 1), settingsRepository.settingsFlow.value.dailySkipCounts)
 
-        // Cancelled swipe by OS must NOT increment counter.
+        // Cancelled swipe by OS must NOT increment lifetime or daily counter.
         fakeClockMs += 700L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
@@ -757,8 +768,9 @@ class SkipperAccessibilityServiceTest {
         val cancelledGesture = shadowService.gesturesDispatched[1]
         cancelledGesture.callback()?.onCancelled(cancelledGesture.description())
         assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+        assertEquals(mapOf(LocalDate.of(2026, 11, 25) to 1), settingsRepository.settingsFlow.value.dailySkipCounts)
 
-        // Pre-dispatch abort when window becomes organic must NOT increment counter.
+        // Pre-dispatch abort when window becomes organic must NOT increment lifetime or daily counter.
         fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
@@ -767,6 +779,31 @@ class SkipperAccessibilityServiceTest {
         scheduler.firePending()
         assertEquals(2, shadowService.gesturesDispatched.size)
         assertEquals(1, settingsRepository.settingsFlow.value.skippedReelsCount)
+        assertEquals(mapOf(LocalDate.of(2026, 11, 25) to 1), settingsRepository.settingsFlow.value.dailySkipCounts)
+
+        // Advancing local calendar date into next week records against the new Monday date atomically.
+        currentLocalDate = LocalDate.of(2026, 11, 30)
+        phase = "custom_ad"
+        fakeClockMs += 200L
+        service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
+        assertNotNull(scheduler.pendingAction)
+        fakeClockMs += 650L
+        scheduler.firePending()
+        assertEquals(3, shadowService.gesturesDispatched.size)
+        val rolloverGesture = shadowService.gesturesDispatched[2]
+        rolloverGesture.callback()?.onCompleted(rolloverGesture.description())
+        assertEquals(2, settingsRepository.settingsFlow.value.skippedReelsCount)
+        assertEquals(
+            mapOf(
+                LocalDate.of(2026, 11, 25) to 1,
+                LocalDate.of(2026, 11, 30) to 1,
+            ),
+            settingsRepository.settingsFlow.value.dailySkipCounts,
+        )
+        assertEquals(
+            listOf(LocalDate.of(2026, 11, 25), LocalDate.of(2026, 11, 30)),
+            settingsRepository.incrementedDates,
+        )
     }
 
     @Test

@@ -1,10 +1,16 @@
 package com.adreels.skipper.data
 
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.adreels.skipper.domain.KeywordValidationError
 import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.SkipperConfig
 import java.io.File
 import java.nio.file.Path
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -170,6 +176,121 @@ class SkipperSettingsRepositoryTest {
             assertEquals(20, repo.settingsFlow.value.skippedReelsCount)
             assertFalse(repo.settingsFlow.value.isMasterEnabled)
             assertEquals(900L, repo.settingsFlow.value.skipDelayMs)
+        } finally {
+            scope.cancel()
+            scope.coroutineContext[Job]?.join()
+        }
+    }
+
+    @Test
+    fun `persists atomic daily counts alongside preserved legacy lifetime count and prunes beyond 12 weeks`() = runBlocking {
+        val storeFile = File(tempDir.toFile(), "history_settings.preferences_pb")
+        val legacyScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val legacyDataStore = DataStoreSkipperSettingsRepository.createDataStore(legacyScope) { storeFile }
+            legacyDataStore.edit { prefs ->
+                prefs[booleanPreferencesKey("master_enabled")] = false
+                prefs[longPreferencesKey("skip_delay_ms")] = 500L
+                prefs[stringSetPreferencesKey("custom_keywords")] = setOf("Ad")
+                prefs[intPreferencesKey("skipped_reels_count")] = 23
+            }
+        } finally {
+            legacyScope.cancel()
+            legacyScope.coroutineContext[Job]?.join()
+        }
+
+        val currentMonday = LocalDate.of(2026, 11, 23)
+        val currentWednesday = LocalDate.of(2026, 11, 25)
+        val scope1 = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val repo1 = DataStoreSkipperSettingsRepository(
+                dataStore = DataStoreSkipperSettingsRepository.createDataStore(scope1) { storeFile },
+                scope = scope1,
+            )
+            val loaded = repo1.awaitInitialLoad()
+            assertEquals(23, loaded.skippedReelsCount)
+            assertEquals(emptyMap(), loaded.dailySkipCounts)
+            assertFalse(loaded.isMasterEnabled)
+            assertEquals(500L, loaded.skipDelayMs)
+            assertEquals(setOf("Ad"), loaded.customKeywords)
+
+            // Record skips spanning 15 past weeks plus 2 days in the active week.
+            for (weeksBack in 15 downTo 1) {
+                repo1.incrementSkippedReelsCount(currentMonday.minusWeeks(weeksBack.toLong()))
+            }
+            repo1.incrementSkippedReelsCount(currentMonday)
+            repo1.incrementSkippedReelsCount(currentMonday)
+            repo1.incrementSkippedReelsCount(currentWednesday)
+        } finally {
+            scope1.cancel()
+            scope1.coroutineContext[Job]?.join()
+        }
+
+        val scope2 = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val repo2 = DataStoreSkipperSettingsRepository(
+                dataStore = DataStoreSkipperSettingsRepository.createDataStore(scope2) { storeFile },
+                scope = scope2,
+            )
+            val reloaded = repo2.awaitInitialLoad()
+            assertEquals(41, reloaded.skippedReelsCount)
+            assertFalse(reloaded.isMasterEnabled)
+            assertEquals(500L, reloaded.skipDelayMs)
+            assertEquals(setOf("Ad"), reloaded.customKeywords)
+            assertEquals(14, reloaded.dailySkipCounts.size)
+            assertEquals(2, reloaded.dailySkipCounts[currentMonday])
+            assertEquals(1, reloaded.dailySkipCounts[currentWednesday])
+            assertTrue(currentMonday.minusWeeks(12) in reloaded.dailySkipCounts)
+            assertTrue(currentMonday.minusWeeks(13) !in reloaded.dailySkipCounts)
+            assertTrue(currentMonday.minusWeeks(15) !in reloaded.dailySkipCounts)
+        } finally {
+            scope2.cancel()
+            scope2.coroutineContext[Job]?.join()
+        }
+    }
+
+    @Test
+    fun `recovers fail-safely from malformed or negative daily_skip_counts without losing other settings`() = runBlocking {
+        val storeFile = File(tempDir.toFile(), "malformed_history.preferences_pb")
+        val seedScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val seedStore = DataStoreSkipperSettingsRepository.createDataStore(seedScope) { storeFile }
+            seedStore.edit { prefs ->
+                prefs[booleanPreferencesKey("master_enabled")] = false
+                prefs[longPreferencesKey("skip_delay_ms")] = 650L
+                prefs[stringSetPreferencesKey("custom_keywords")] = setOf("Reklam")
+                prefs[intPreferencesKey("skipped_reels_count")] = 40
+                prefs[stringSetPreferencesKey("daily_skip_counts")] = setOf(
+                    "2026-11-23=3",
+                    "not-a-date=4",
+                    "2026-11-22=-5",
+                    "2026-02-30=2",
+                    "2026-11-21=0",
+                    "2026-11-20=abc",
+                    "corrupted_entry",
+                )
+            }
+        } finally {
+            seedScope.cancel()
+            seedScope.coroutineContext[Job]?.join()
+        }
+
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val repo = DataStoreSkipperSettingsRepository(
+                dataStore = DataStoreSkipperSettingsRepository.createDataStore(scope) { storeFile },
+                scope = scope,
+            )
+            val recovered = repo.awaitInitialLoad()
+            assertFalse(recovered.isMasterEnabled)
+            assertEquals(650L, recovered.skipDelayMs)
+            assertEquals(setOf("Reklam"), recovered.customKeywords)
+            assertEquals(40, recovered.skippedReelsCount)
+            assertEquals(mapOf(LocalDate.of(2026, 11, 23) to 3), recovered.dailySkipCounts)
+
+            repo.incrementSkippedReelsCount(LocalDate.of(2026, 11, 23))
+            assertEquals(41, repo.settingsFlow.value.skippedReelsCount)
+            assertEquals(mapOf(LocalDate.of(2026, 11, 23) to 4), repo.settingsFlow.value.dailySkipCounts)
         } finally {
             scope.cancel()
             scope.coroutineContext[Job]?.join()

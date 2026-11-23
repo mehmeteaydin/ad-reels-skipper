@@ -31,6 +31,7 @@ import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
 import java.io.File
 import java.io.FileOutputStream
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -85,8 +86,12 @@ class HomeScreenTest {
             return changed
         }
 
-        override suspend fun incrementSkippedReelsCount() {
-            state.value = state.value.copy(skippedReelsCount = state.value.skippedReelsCount + 1)
+        override suspend fun incrementSkippedReelsCount(date: LocalDate) {
+            val updatedCount = (state.value.dailySkipCounts[date] ?: 0) + 1
+            state.value = state.value.copy(
+                skippedReelsCount = state.value.skippedReelsCount + 1,
+                dailySkipCounts = state.value.dailySkipCounts + (date to updatedCount),
+            )
         }
     }
 
