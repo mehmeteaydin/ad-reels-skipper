@@ -732,7 +732,7 @@ class SkipperAccessibilityServiceTest {
         assertEquals(KeywordValidationResult.Valid("Reklam"), settingsRepository.addCustomKeyword("Reklam"))
         settingsRepository.setSkipDelayMs(650L)
 
-        fakeClockMs += 200L
+        fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
         assertEquals(650L, scheduler.scheduledDelayMs)
@@ -745,7 +745,7 @@ class SkipperAccessibilityServiceTest {
         // Re-enable toggle and complete one upward swipe -> counter and daily count increment to 1.
         settingsRepository.setMasterEnabled(true)
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-        fakeClockMs += 200L
+        fakeClockMs += 150L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertNotNull(scheduler.pendingAction)
 
