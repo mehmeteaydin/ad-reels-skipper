@@ -27,4 +27,21 @@
     <string name="error_keyword_too_long">Keyword must be 40 characters or fewer.</string>
     <string name="error_keyword_no_alnum">Keyword must include at least one letter or digit.</string>
     <string name="error_keyword_duplicate">Keyword already exists in active keywords.</string>
+    <string name="weekly_activity_title">Weekly Activity</string>
+    <string name="weekly_total_skips">%1$d skipped</string>
+    <string name="history_button">History</string>
+    <string name="history_button_cd">Open past weeks skip history</string>
+    <string name="past_weeks_title">Past Weeks</string>
+    <string name="past_weeks_empty">No past weeks recorded yet.</string>
+    <string name="close_history_button">Close</string>
+    <string name="day_skip_count_cd">%1$s: %2$d skipped reels</string>
+    <string name="day_skip_count_today_cd">%1$s (Today): %2$d skipped reels</string>
+    <string name="archived_week_row_cd">%1$s, %2$d skipped reels</string>
+    <string name="day_short_mon">Mon</string>
+    <string name="day_short_tue">Tue</string>
+    <string name="day_short_wed">Wed</string>
+    <string name="day_short_thu">Thu</string>
+    <string name="day_short_fri">Fri</string>
+    <string name="day_short_sat">Sat</string>
+    <string name="day_short_sun">Sun</string>
 </resources>

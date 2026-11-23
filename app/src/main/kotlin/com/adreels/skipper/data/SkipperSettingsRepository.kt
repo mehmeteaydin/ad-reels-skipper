@@ -17,8 +17,10 @@ import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.ReelAdDetector
 import com.adreels.skipper.domain.SkipperConfig
+import com.adreels.skipper.domain.WeeklySkipAggregator
 import java.io.File
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,12 +35,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Persisted user preferences and lifetime skip metrics (`BR-2`, `BR-5`, `BR-6`, `BR-7`). */
+/** Persisted user preferences and local lifetime/daily skip metrics (`BR-2`, `BR-5`, `BR-6`, `BR-7`). */
 data class SkipperSettings(
     val isMasterEnabled: Boolean = true,
     val skipDelayMs: Long = SkipperConfig.DEFAULT_SKIP_DELAY_MS,
     val customKeywords: Set<String> = emptySet(),
     val skippedReelsCount: Int = 0,
+    val dailySkipCounts: Map<LocalDate, Int> = emptyMap(),
 ) {
     /** Converts persisted user settings into a pure domain [SkipperConfig] snapshot. */
     fun toSkipperConfig(): SkipperConfig {
@@ -62,7 +65,7 @@ interface SkipperSettingsRepository {
 
     suspend fun removeCustomKeyword(keyword: String): Boolean
 
-    suspend fun incrementSkippedReelsCount()
+    suspend fun incrementSkippedReelsCount(date: LocalDate = LocalDate.now())
 }
 
 private val Context.skipperPreferencesDataStore: DataStore<Preferences> by preferencesDataStore(
@@ -157,10 +160,27 @@ class DataStoreSkipperSettingsRepository(
         }
     }
 
-    override suspend fun incrementSkippedReelsCount() {
+    override suspend fun incrementSkippedReelsCount(date: LocalDate) {
         mutatePreferences { prefs ->
-            val current = (prefs[SKIPPED_REELS_COUNT_KEY] ?: 0).coerceAtLeast(0)
-            prefs[SKIPPED_REELS_COUNT_KEY] = current + 1
+            val currentLifetime = (prefs[SKIPPED_REELS_COUNT_KEY] ?: 0).coerceAtLeast(0)
+            prefs[SKIPPED_REELS_COUNT_KEY] = if (currentLifetime < Int.MAX_VALUE) {
+                currentLifetime + 1
+            } else {
+                Int.MAX_VALUE
+            }
+
+            val currentDaily = WeeklySkipAggregator.deserialize(prefs[DAILY_SKIP_COUNTS_KEY].orEmpty())
+            val existingForDate = (currentDaily[date] ?: 0).coerceAtLeast(0)
+            val updatedForDate = if (existingForDate < Int.MAX_VALUE) {
+                existingForDate + 1
+            } else {
+                Int.MAX_VALUE
+            }
+            val prunedDaily = WeeklySkipAggregator.prune(
+                dailyCounts = currentDaily + (date to updatedForDate),
+                referenceDate = date,
+            )
+            prefs[DAILY_SKIP_COUNTS_KEY] = WeeklySkipAggregator.serialize(prunedDaily)
         }
     }
 
@@ -202,11 +222,13 @@ class DataStoreSkipperSettingsRepository(
         )
         val customKeywords = sanitizeCustomKeywords(prefs[CUSTOM_KEYWORDS_KEY].orEmpty())
         val skippedCount = (prefs[SKIPPED_REELS_COUNT_KEY] ?: 0).coerceAtLeast(0)
+        val dailyCounts = WeeklySkipAggregator.deserialize(prefs[DAILY_SKIP_COUNTS_KEY].orEmpty())
         return SkipperSettings(
             isMasterEnabled = masterEnabled,
             skipDelayMs = delayMs,
             customKeywords = customKeywords,
             skippedReelsCount = skippedCount,
+            dailySkipCounts = dailyCounts,
         )
     }
 
@@ -234,6 +256,7 @@ class DataStoreSkipperSettingsRepository(
         private val SKIP_DELAY_MS_KEY = longPreferencesKey("skip_delay_ms")
         private val CUSTOM_KEYWORDS_KEY = stringSetPreferencesKey("custom_keywords")
         private val SKIPPED_REELS_COUNT_KEY = intPreferencesKey("skipped_reels_count")
+        private val DAILY_SKIP_COUNTS_KEY = stringSetPreferencesKey("daily_skip_counts")
 
         /** Creates a corruption-safe [DataStore] backed by [produceFile] (used in unit tests). */
         fun createDataStore(

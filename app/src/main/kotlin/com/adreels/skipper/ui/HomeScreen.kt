@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -35,20 +39,29 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.adreels.skipper.R
+import com.adreels.skipper.domain.DailySkipEntry
 import com.adreels.skipper.domain.KeywordValidationError
 import com.adreels.skipper.domain.SkipperConfig
+import com.adreels.skipper.domain.WeeklySkipAggregator
+import com.adreels.skipper.domain.WeeklySkipRecord
 import com.adreels.skipper.ui.theme.SkipperTheme
+import java.time.DayOfWeek
+import java.time.LocalDate
 import kotlin.math.roundToLong
 
 internal object DashboardTags {
@@ -57,13 +70,28 @@ internal object DashboardTags {
     const val KEYWORD_INPUT = "KeywordInputField"
     const val ADD_KEYWORD_BUTTON = "AddKeywordButton"
     const val KEYWORD_ERROR_TEXT = "KeywordErrorText"
+    const val WEEKLY_ACTIVITY_CARD = "WeeklyActivityCard"
+    const val WEEKLY_RANGE_TEXT = "WeeklyRangeText"
+    const val WEEKLY_TOTAL_TEXT = "WeeklyTotalText"
+    const val OPEN_HISTORY_BUTTON = "OpenHistoryButton"
+    const val HISTORY_DIALOG = "WeeklyHistoryDialog"
+    const val HISTORY_EMPTY_TEXT = "HistoryEmptyText"
+    const val CLOSE_HISTORY_BUTTON = "CloseHistoryButton"
+    const val ARCHIVED_DETAIL_RANGE_TEXT = "ArchivedDetailRangeText"
 
     fun removeKeywordButton(keyword: String): String = "RemoveKeywordButton_$keyword"
+
+    fun weeklyDayBar(dayOfWeek: DayOfWeek): String = "WeeklyDayBar_${dayOfWeek.name}"
+
+    fun archivedWeekRow(weekStart: LocalDate): String = "ArchivedWeekRow_$weekStart"
+
+    fun archivedDayBar(dayOfWeek: DayOfWeek): String = "ArchivedDayBar_${dayOfWeek.name}"
 }
 
 /**
  * Single-screen Material 3 Dashboard displaying service permission onboarding (`S-1`), active/paused
- * skipping controls (`S-2`/`S-3`), delay slider, lifetime skip metrics, and custom keywords (`S-4`).
+ * skipping controls (`S-2`/`S-3`), weekly activity chart + archive (`S-5`..`S-8`), delay slider,
+ * lifetime skip metrics, and custom keywords (`S-4`).
  */
 @Composable
 fun HomeScreen(
@@ -75,6 +103,9 @@ fun HomeScreen(
     onKeywordInputChange: (String) -> Unit = {},
     onAddKeyword: () -> Unit = {},
     onRemoveKeyword: (String) -> Unit = {},
+    onOpenHistory: () -> Unit = {},
+    onCloseHistory: () -> Unit = {},
+    onSelectArchivedWeek: (LocalDate) -> Unit = {},
 ) {
     SkipperTheme {
         Scaffold(
@@ -99,6 +130,11 @@ fun HomeScreen(
                     skippedReelsCount = uiState.skippedReelsCount,
                     onToggleMaster = onToggleMaster,
                 )
+                WeeklyActivityCard(
+                    currentWeek = uiState.currentWeek,
+                    referenceYear = uiState.today.year,
+                    onOpenHistory = onOpenHistory,
+                )
                 SkipDelayCard(
                     skipDelayMs = uiState.skipDelayMs,
                     onSkipDelayChange = onSkipDelayChange,
@@ -111,6 +147,16 @@ fun HomeScreen(
                     onKeywordInputChange = onKeywordInputChange,
                     onAddKeyword = onAddKeyword,
                     onRemoveKeyword = onRemoveKeyword,
+                )
+            }
+
+            if (uiState.isHistoryDialogOpen) {
+                WeeklyHistoryDialog(
+                    archivedWeeks = uiState.archivedWeeks,
+                    selectedWeekStart = uiState.selectedArchivedWeekStart,
+                    referenceYear = uiState.today.year,
+                    onSelectWeek = onSelectArchivedWeek,
+                    onDismiss = onCloseHistory,
                 )
             }
         }
@@ -280,6 +326,380 @@ private fun MetricsAndMasterCard(
                         .semantics { contentDescription = toggleLabel },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyActivityCard(
+    currentWeek: WeeklySkipRecord,
+    referenceYear: Int,
+    onOpenHistory: () -> Unit,
+) {
+    val weekRangeText = WeeklySkipAggregator.formatWeekRange(
+        weekStart = currentWeek.weekStart,
+        weekEnd = currentWeek.weekEnd,
+        referenceYear = referenceYear,
+    )
+    val historyCd = stringResource(R.string.history_button_cd)
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(DashboardTags.WEEKLY_ACTIVITY_CARD),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.weekly_activity_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = weekRangeText,
+                        modifier = Modifier.testTag(DashboardTags.WEEKLY_RANGE_TEXT),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.weekly_total_skips, currentWeek.totalSkips),
+                            modifier = Modifier
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .testTag(DashboardTags.WEEKLY_TOTAL_TEXT),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onOpenHistory,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag(DashboardTags.OPEN_HISTORY_BUTTON)
+                            .semantics { contentDescription = historyCd },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.history_button),
+                            modifier = Modifier.clearAndSetSemantics {},
+                        )
+                    }
+                }
+            }
+
+            WeeklyBarChart(
+                days = currentWeek.days,
+                dayTagProvider = DashboardTags::weeklyDayBar,
+                barMaxHeight = 64.dp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeeklyBarChart(
+    days: List<DailySkipEntry>,
+    dayTagProvider: (DayOfWeek) -> String,
+    barMaxHeight: Dp,
+) {
+    val maxCount = (days.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        for (entry in days) {
+            WeeklyDayBarItem(
+                entry = entry,
+                maxCount = maxCount,
+                barMaxHeight = barMaxHeight,
+                modifier = Modifier.weight(1f),
+                testTag = dayTagProvider(entry.dayOfWeek),
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeeklyDayBarItem(
+    entry: DailySkipEntry,
+    maxCount: Int,
+    barMaxHeight: Dp,
+    testTag: String,
+    modifier: Modifier = Modifier,
+) {
+    val dayLabel = shortDayLabel(entry.dayOfWeek)
+    val accessibilitySummary = if (entry.isToday) {
+        stringResource(R.string.day_skip_count_today_cd, dayLabel, entry.count)
+    } else {
+        stringResource(R.string.day_skip_count_cd, dayLabel, entry.count)
+    }
+    val barHeight = if (entry.count == 0) {
+        4.dp
+    } else {
+        val fraction = (entry.count.toFloat() / maxCount.toFloat()).coerceIn(0f, 1f)
+        (barMaxHeight * fraction).coerceAtLeast(10.dp)
+    }
+    val barColor = when {
+        entry.isToday && entry.count == 0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
+        entry.count == 0 -> MaterialTheme.colorScheme.surfaceVariant
+        entry.isToday -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.secondary
+    }
+    val itemBackground = if (entry.isToday) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val textColor = if (entry.isToday) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(itemBackground)
+            .padding(horizontal = 2.dp, vertical = 6.dp)
+            .testTag(testTag)
+            .clearAndSetSemantics { contentDescription = accessibilitySummary },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = entry.count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (entry.isToday) FontWeight.Bold else FontWeight.Medium,
+            color = textColor,
+            maxLines = 1,
+            softWrap = false,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(barMaxHeight),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.58f)
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                    .background(barColor),
+            )
+        }
+        Text(
+            text = dayLabel,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (entry.isToday) FontWeight.Bold else FontWeight.Normal,
+            color = textColor,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+@Composable
+private fun WeeklyHistoryDialog(
+    archivedWeeks: List<WeeklySkipRecord>,
+    selectedWeekStart: LocalDate?,
+    referenceYear: Int,
+    onSelectWeek: (LocalDate) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(DashboardTags.HISTORY_DIALOG),
+        title = {
+            Text(
+                text = stringResource(R.string.past_weeks_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            if (archivedWeeks.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.past_weeks_empty),
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .testTag(DashboardTags.HISTORY_EMPTY_TEXT),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                val selectedWeek = archivedWeeks.firstOrNull { it.weekStart == selectedWeekStart }
+                    ?: archivedWeeks.first()
+                val selectedRangeLabel = WeeklySkipAggregator.formatWeekRange(
+                    weekStart = selectedWeek.weekStart,
+                    weekEnd = selectedWeek.weekEnd,
+                    referenceYear = referenceYear,
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = selectedRangeLabel,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag(DashboardTags.ARCHIVED_DETAIL_RANGE_TEXT),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = stringResource(R.string.weekly_total_skips, selectedWeek.totalSkips),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            WeeklyBarChart(
+                                days = selectedWeek.days,
+                                dayTagProvider = DashboardTags::archivedDayBar,
+                                barMaxHeight = 52.dp,
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        for (week in archivedWeeks) {
+                            ArchivedWeekRow(
+                                week = week,
+                                referenceYear = referenceYear,
+                                isSelected = week.weekStart == selectedWeek.weekStart,
+                                onSelect = { onSelectWeek(week.weekStart) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag(DashboardTags.CLOSE_HISTORY_BUTTON),
+            ) {
+                Text(text = stringResource(R.string.close_history_button))
+            }
+        },
+    )
+}
+
+@Composable
+private fun ArchivedWeekRow(
+    week: WeeklySkipRecord,
+    referenceYear: Int,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val rangeLabel = WeeklySkipAggregator.formatWeekRange(
+        weekStart = week.weekStart,
+        weekEnd = week.weekEnd,
+        referenceYear = referenceYear,
+    )
+    val rowDescription = stringResource(R.string.archived_week_row_cd, rangeLabel, week.totalSkips)
+    val containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = if (isSelected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        onClick = onSelect,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag(DashboardTags.archivedWeekRow(week.weekStart))
+            .semantics {
+                selected = isSelected
+                contentDescription = rowDescription
+            },
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clearAndSetSemantics {},
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = rangeLabel,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color = textColor,
+            )
+            Text(
+                text = stringResource(R.string.weekly_total_skips, week.totalSkips),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isSelected) textColor else MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
@@ -484,6 +904,19 @@ private fun KeywordsCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun shortDayLabel(dayOfWeek: DayOfWeek): String {
+    return when (dayOfWeek) {
+        DayOfWeek.MONDAY -> stringResource(R.string.day_short_mon)
+        DayOfWeek.TUESDAY -> stringResource(R.string.day_short_tue)
+        DayOfWeek.WEDNESDAY -> stringResource(R.string.day_short_wed)
+        DayOfWeek.THURSDAY -> stringResource(R.string.day_short_thu)
+        DayOfWeek.FRIDAY -> stringResource(R.string.day_short_fri)
+        DayOfWeek.SATURDAY -> stringResource(R.string.day_short_sat)
+        DayOfWeek.SUNDAY -> stringResource(R.string.day_short_sun)
     }
 }
 

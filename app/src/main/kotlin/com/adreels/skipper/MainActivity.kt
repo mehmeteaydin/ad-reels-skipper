@@ -14,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
+import com.adreels.skipper.ui.DashboardClock
 import com.adreels.skipper.ui.DashboardViewModel
 import com.adreels.skipper.ui.HomeScreen
 
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
         DashboardViewModel.factory(
             repository = SkipperSettingsRepositoryProvider.get(applicationContext),
             initialServiceEnabled = AccessibilityServiceStatusChecker.isEnabled(applicationContext),
+            todayProvider = DashboardClock::today,
         )
     }
 
@@ -75,6 +77,9 @@ class MainActivity : ComponentActivity() {
                 onKeywordInputChange = dashboardViewModel::onKeywordInputChange,
                 onAddKeyword = dashboardViewModel::submitKeyword,
                 onRemoveKeyword = dashboardViewModel::removeCustomKeyword,
+                onOpenHistory = dashboardViewModel::openHistory,
+                onCloseHistory = dashboardViewModel::closeHistory,
+                onSelectArchivedWeek = dashboardViewModel::selectArchivedWeek,
             )
         }
     }

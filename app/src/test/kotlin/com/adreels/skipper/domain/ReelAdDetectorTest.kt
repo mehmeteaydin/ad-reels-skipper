@@ -250,6 +250,7 @@ class ReelAdDetectorTest {
 
     @Test
     fun `throttles rapid events confirms pending skips and cancels when ad disappears before delay`() {
+        assertEquals(180L, SkipperConfig.DEFAULT_THROTTLE_INTERVAL_MS)
         val detector = ReelAdDetector()
         val adSnapshot = WindowSnapshot(
             packageName = SkipperConfig.TARGET_PACKAGE,
@@ -261,16 +262,17 @@ class ReelAdDetectorTest {
         )
 
         assertEquals(SkipDecision.Ignore(IgnoreReason.NO_SPONSORED_LABEL), detector.evaluate(organicSnapshot, nowMs = 1_000L))
-        assertEquals(SkipDecision.Ignore(IgnoreReason.THROTTLED), detector.evaluate(adSnapshot, nowMs = 1_100L))
-        assertEquals(SkipDecision.ScheduleSkip(150L), detector.evaluate(adSnapshot, nowMs = 1_120L))
+        assertEquals(SkipDecision.Ignore(IgnoreReason.THROTTLED), detector.evaluate(adSnapshot, nowMs = 1_179L))
+        assertEquals(SkipDecision.ScheduleSkip(150L), detector.evaluate(adSnapshot, nowMs = 1_180L))
 
-        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_300L))
-        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_200L))
-        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_230L))
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_360L))
+        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_260L))
+        assertEquals(SkipDecision.AwaitPendingSkip, detector.evaluate(adSnapshot, nowMs = 1_290L))
         assertTrue(detector.isSponsoredReelPresent(adSnapshot))
 
-        assertEquals(SkipDecision.CancelPendingSkip, detector.evaluate(organicSnapshot, nowMs = 1_300L))
-        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_420L))
+        assertEquals(SkipDecision.CancelPendingSkip, detector.evaluate(organicSnapshot, nowMs = 1_360L))
+        assertFalse(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_539L))
+        assertTrue(detector.shouldInspectSnapshot(SkipperConfig.TARGET_PACKAGE, nowMs = 1_540L))
         assertFalse(detector.isSponsoredReelPresent(organicSnapshot))
     }
 

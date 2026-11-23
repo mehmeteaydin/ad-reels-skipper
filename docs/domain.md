@@ -14,6 +14,7 @@
 | `Skip Delay` | User-configured delay in milliseconds before a detected ad is skipped | Range: 50 ms – 2000 ms (default: 150 ms). |
 | `Cooldown Window` | Minimum quiet period after a gesture during which new skips are suppressed | Prevents multi-swiping caused by animation or event floods. |
 | `Master Toggle` | Global user setting enabling or disabling automatic skipping | Controlled from the Compose dashboard. |
+| `Weekly Skip History` | Local Monday–Sunday daily skip counts and up to 12 newest non-empty archived weeks | Stores strictly local calendar dates and integer counts (`BR-7`, `INV-1`). |
 
 ## Business rules
 - **BR-1 (Target Confinement)**: Detection and gesture dispatch apply exclusively when the foreground application package is `com.instagram.android`.
@@ -22,7 +23,7 @@
 - **BR-4 (Cooldown Protection)**: After a skip gesture is triggered, subsequent detection triggers are ignored for the duration of the Cooldown Window (default: 700 ms).
 - **BR-5 (Configurable Delay)**: When an ad is confirmed, the swipe gesture executes after the exact configured `Skip Delay`.
 - **BR-6 (Keyword Extensibility)**: User-defined keywords are persisted locally and unioned with default keywords (`Sponsored`, `Sponsorlu`, `Paid partnership`).
-- **BR-7 (Skip Metrics)**: Each executed skip gesture increments the local lifetime skip count by 1.
+- **BR-7 (Skip Metrics)**: Each completed skip gesture (`onCompleted`) atomically increments both the local lifetime skip counter and the local daily skip count for the device's current calendar date by 1 (`Mon`–`Sun` active week plus up to 12 newest non-empty archived past weeks). Persisted metrics store strictly local calendar dates and integer counts (`INV-1`).
 
 ## Key domain invariants
 - **INV-1 (Zero External Data Flow)**: No screen content, text, or user metadata observed by the service may ever be transmitted off-device or stored beyond the ephemeral evaluation of the current event.
