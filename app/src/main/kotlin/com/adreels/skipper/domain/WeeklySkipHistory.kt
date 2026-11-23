@@ -174,7 +174,7 @@ object WeeklySkipAggregator {
             weekStart = weekStart,
             weekEnd = weekStart.plusDays(DAYS_IN_WEEK - 1L),
             days = days,
-            totalSkips = days.sumOf { it.count },
+            totalSkips = days.sumOf { it.count.toLong() }.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         )
     }
 
@@ -183,6 +183,7 @@ object WeeklySkipAggregator {
         if (parts.size != 2) return null
         val dateText = parts[0].trim()
         val countText = parts[1].trim()
+        if (dateText.length != 10 || !dateText[0].isDigit()) return null
         val date = try {
             LocalDate.parse(dateText)
         } catch (_: DateTimeParseException) {

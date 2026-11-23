@@ -358,7 +358,7 @@ private fun WeeklyActivityCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -403,7 +403,10 @@ private fun WeeklyActivityCard(
                             .semantics { contentDescription = historyCd },
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     ) {
-                        Text(text = stringResource(R.string.history_button))
+                        Text(
+                            text = stringResource(R.string.history_button),
+                            modifier = Modifier.clearAndSetSemantics {},
+                        )
                     }
                 }
             }
@@ -574,12 +577,14 @@ private fun WeeklyHistoryDialog(
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
                                     text = selectedRangeLabel,
-                                    modifier = Modifier.testTag(DashboardTags.ARCHIVED_DETAIL_RANGE_TEXT),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag(DashboardTags.ARCHIVED_DETAIL_RANGE_TEXT),
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -677,12 +682,14 @@ private fun ArchivedWeekRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clearAndSetSemantics {},
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = rangeLabel,
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                 color = textColor,

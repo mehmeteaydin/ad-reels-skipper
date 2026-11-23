@@ -139,6 +139,9 @@ class WeeklySkipHistoryTest {
             "2026-11-27=abc",
             "missing-separator",
             "2026-11-28=1=extra",
+            "+999999999-12-31=1",
+            "-999999999-01-01=2",
+            "+2026-11-2=1",
             "2026-11-23=9",
         )
         val decoded = WeeklySkipAggregator.deserialize(corrupted)
@@ -149,6 +152,24 @@ class WeeklySkipHistoryTest {
             ),
             decoded,
         )
+        val afterCorruptedSummary = WeeklySkipAggregator.summarize(decoded, today = LocalDate.of(2026, 11, 25))
+        assertEquals(11, afterCorruptedSummary.currentWeek.totalSkips)
+        assertEquals(decoded, WeeklySkipAggregator.prune(decoded, referenceDate = LocalDate.of(2026, 11, 25)))
+    }
+
+    @Test
+    fun `summarize saturates weekly totalSkips at Int MAX_VALUE without signed overflow`() {
+        val counts = mapOf(
+            LocalDate.of(2026, 11, 16) to Int.MAX_VALUE,
+            LocalDate.of(2026, 11, 17) to 5,
+            LocalDate.of(2026, 11, 23) to Int.MAX_VALUE,
+            LocalDate.of(2026, 11, 24) to 1,
+        )
+        val summary = WeeklySkipAggregator.summarize(counts, today = LocalDate.of(2026, 11, 25))
+
+        assertEquals(Int.MAX_VALUE, summary.currentWeek.totalSkips)
+        assertEquals(1, summary.archivedWeeks.size)
+        assertEquals(Int.MAX_VALUE, summary.archivedWeeks.single().totalSkips)
     }
 
     @Test

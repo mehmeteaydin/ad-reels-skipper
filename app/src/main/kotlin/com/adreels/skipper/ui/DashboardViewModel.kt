@@ -39,7 +39,7 @@ data class DashboardUiState(
     val today: LocalDate = LocalDate.now(),
     val currentWeek: WeeklySkipRecord = WeeklySkipAggregator.summarize(
         dailyCounts = emptyMap(),
-        today = LocalDate.now(),
+        today = today,
     ).currentWeek,
     val archivedWeeks: List<WeeklySkipRecord> = emptyList(),
     val isHistoryDialogOpen: Boolean = false,
