@@ -1,6 +1,6 @@
 # Spec 0007 — Weekly Daily Skip History and Archive View
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0007-plan.md`
 - Self-critique: done
@@ -43,25 +43,25 @@ Users of `Ad Reels Skipper` want to see how many sponsored Reels were automatica
   - Editing shipped specs under `specs/done/` (`AGENTS.md` Rule 7).
 
 ## Acceptance criteria
-- [ ] AC-1 — Given a completed skip gesture (`onCompleted`) on local date `D`, both the lifetime skip counter and the daily count for `D` increment by `1` in local persistence, whereas cancelled, failed, or aborted skips increment neither counter (`BR-7`, `INV-1`).
-- [ ] AC-2 — Given recorded daily counts spanning one or more Monday–Sunday calendar weeks and a reference current date `today`, pure domain aggregation computes: (a) the current week's exact `[currentWeekMonday .. currentWeekSunday]` `Mon`–`Sun` seven-day breakdown and weekly total (all `0` on a fresh Monday rollover), and (b) archived past weeks strictly before `currentWeekMonday` that have `weeklyTotal > 0` sorted newest-first, while safely ignoring dates strictly after `currentWeekSunday`.
-- [ ] AC-3 — Given daily skip records spanning more than 12 past calendar weeks with skips, local persistence prunes archived weeks older than the 12 most recent archived weeks while retaining the current week and the 12 newest archived weeks, and recovers fail-safely without crashing or losing unrelated preferences when stored history data is malformed or contains negative counts.
-- [ ] AC-4 — Given the Compose dashboard in states `S-5` (current week empty) and `S-6` (current week with skips), the **Weekly Activity** card displays the current Monday–Sunday date range, accurate weekly total, `Mon`–`Sun` counts with today highlighted, and refreshes its active week when the activity resumes on a new day/week, verified by Robolectric Compose UI tests and headless screenshots (`S-5`, `S-6`).
-- [ ] AC-5 — Given the **History** action on the **Weekly Activity** card in states `S-7` (empty archive) and `S-8` (archived weeks present), tapping **History** opens **Past Weeks** displaying `"No past weeks recorded yet."` when no archive exists, or lists archived past weeks (`totalSkips > 0`, never the active week) newest-first with the newest week pre-selected and allows switching between archived weeks to view each week's `Mon`–`Sun` daily breakdown, verified by Robolectric Compose UI tests and headless screenshots (`S-7`, `S-8`).
-- [ ] AC-6 — Given all existing features and project invariants, existing dashboard states (`S-1`..`S-4`), `Lifetime Skipped Reels` persistence across upgrades, `docs/domain.md` (`BR-7` update), `INV-1`/`INV-2` boundaries, and both `./scripts/check` and `./scripts/check --fast` exit `0`.
+- [x] AC-1 — Given a completed skip gesture (`onCompleted`) on local date `D`, both the lifetime skip counter and the daily count for `D` increment by `1` in local persistence, whereas cancelled, failed, or aborted skips increment neither counter (`BR-7`, `INV-1`).
+- [x] AC-2 — Given recorded daily counts spanning one or more Monday–Sunday calendar weeks and a reference current date `today`, pure domain aggregation computes: (a) the current week's exact `[currentWeekMonday .. currentWeekSunday]` `Mon`–`Sun` seven-day breakdown and weekly total (all `0` on a fresh Monday rollover), and (b) archived past weeks strictly before `currentWeekMonday` that have `weeklyTotal > 0` sorted newest-first, while safely ignoring dates strictly after `currentWeekSunday`.
+- [x] AC-3 — Given daily skip records spanning more than 12 past calendar weeks with skips, local persistence prunes archived weeks older than the 12 most recent archived weeks while retaining the current week and the 12 newest archived weeks, and recovers fail-safely without crashing or losing unrelated preferences when stored history data is malformed or contains negative counts.
+- [x] AC-4 — Given the Compose dashboard in states `S-5` (current week empty) and `S-6` (current week with skips), the **Weekly Activity** card displays the current Monday–Sunday date range, accurate weekly total, `Mon`–`Sun` counts with today highlighted, and refreshes its active week when the activity resumes on a new day/week, verified by Robolectric Compose UI tests and headless screenshots (`S-5`, `S-6`).
+- [x] AC-5 — Given the **History** action on the **Weekly Activity** card in states `S-7` (empty archive) and `S-8` (archived weeks present), tapping **History** opens **Past Weeks** displaying `"No past weeks recorded yet."` when no archive exists, or lists archived past weeks (`totalSkips > 0`, never the active week) newest-first with the newest week pre-selected and allows switching between archived weeks to view each week's `Mon`–`Sun` daily breakdown, verified by Robolectric Compose UI tests and headless screenshots (`S-7`, `S-8`).
+- [x] AC-6 — Given all existing features and project invariants, existing dashboard states (`S-1`..`S-4`), `Lifetime Skipped Reels` persistence across upgrades, `docs/domain.md` (`BR-7` update), `INV-1`/`INV-2` boundaries, and both `./scripts/check` and `./scripts/check --fast` exit `0`.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 1 |
+| Fix rounds | 1 |
+| Review findings: real / noise / deferred | 5 real / 0 noise / 0 deferred |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
