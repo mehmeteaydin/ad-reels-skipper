@@ -320,7 +320,7 @@ class SkipperAccessibilityServiceTest {
         assertEquals(1, rootFetches)
         assertNotNull(scheduler.pendingAction)
 
-        // Rapid event inside 120 ms throttle window must skip Binder tree extraction.
+        // Rapid event while skip is pending and inside 180 ms throttle window must skip Binder tree extraction.
         fakeClockMs += 50L
         service.onAccessibilityEvent(instagramEvent("com.instagram.android"))
         assertEquals(1, rootFetches)
