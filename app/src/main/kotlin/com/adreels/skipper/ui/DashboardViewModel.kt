@@ -130,19 +130,6 @@ class DashboardViewModel(
         }
     }
 
-    /** Updates permission status and refreshes active/archived weekly buckets for the current date. */
-    fun refreshServiceStatus(isEnabled: Boolean) {
-        val connectionState = if (isEnabled) {
-            ServiceConnectionState.ACTIVE
-        } else {
-            ServiceConnectionState.PERMISSION_REQUIRED
-        }
-        refreshPlatformStatus(
-            connectionState = connectionState,
-            isBatteryUnrestricted = _uiState.value.isBatteryUnrestricted,
-        )
-    }
-
     /** Opens the Past Weeks history dialog with the newest archived week pre-selected (`S-7`, `S-8`). */
     fun openHistory() {
         _uiState.update { current ->

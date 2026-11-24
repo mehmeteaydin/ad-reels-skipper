@@ -36,10 +36,6 @@ internal object AccessibilityServiceStatusChecker {
     @Volatile
     private var testingStateOverride: (() -> ServiceConnectionState)? = null
 
-    fun isEnabled(context: Context): Boolean {
-        return resolveConnectionState(context) == ServiceConnectionState.ACTIVE
-    }
-
     fun resolveConnectionState(
         context: Context,
         isConnectedInProcess: Boolean = SkipperAccessibilityService.isConnectedFlow.value,
