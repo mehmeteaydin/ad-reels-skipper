@@ -8,7 +8,7 @@
     <string name="service_status_stopped">Service Stopped</string>
     <string name="service_status_active_desc">Accessibility service is enabled and listening locally for sponsored Instagram Reels.</string>
     <string name="service_status_disabled_desc">Enable Ad Reels Skipper in Android Accessibility Settings to skip sponsored Reels automatically.</string>
-    <string name="service_status_stopped_desc">The background service was stopped by the system. Re-enable Ad Reels Skipper in Accessibility Settings to resume automatic skipping.</string>
+    <string name="service_status_stopped_desc">The background service was stopped by the system. Toggle Ad Reels Skipper off and back on in Accessibility Settings to resume automatic skipping.</string>
     <string name="enable_accessibility_service">Enable Accessibility Service</string>
     <string name="reconnect_accessibility_service">Reconnect in Accessibility Settings</string>
     <string name="skipped_reels_label">Lifetime Skipped Reels</string>

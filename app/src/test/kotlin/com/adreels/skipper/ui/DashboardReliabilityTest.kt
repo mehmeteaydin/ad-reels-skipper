@@ -141,6 +141,9 @@ class DashboardReliabilityTest {
     @Test
     fun `renders state S-9 service stopped dispatches reconnect intent and transitions live on connect and disconnect`() {
         composeTestRule.onNodeWithText("Service Stopped").assertIsDisplayed()
+        val expectedStoppedDesc = "The background service was stopped by the system. " +
+            "Toggle Ad Reels Skipper off and back on in Accessibility Settings to resume automatic skipping."
+        composeTestRule.onNodeWithText(expectedStoppedDesc).assertIsDisplayed()
         composeTestRule.onNodeWithText("Permission Required").assertDoesNotExist()
         composeTestRule.onNodeWithText("Service Active").assertDoesNotExist()
 
