@@ -1,6 +1,6 @@
 # Spec 0008 — Accessibility Hardening, Background Reliability, and Release Signing
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0008-plan.md`
 - Self-critique: done
@@ -47,25 +47,25 @@ Users installing and running `Ad Reels Skipper` across different Android devices
   - Editing shipped specs under `specs/done/` (`AGENTS.md` Rule 7).
 
 ## Acceptance criteria
-- [ ] AC-1 — `accessibility_service_config.xml` scopes `packageNames` strictly to `"com.instagram.android"`, keeps `canRetrieveWindowContent="true"` and `canPerformGestures="true"`, omits `accessibilityFlags` (`flagRetrieveInteractiveWindows` and `flagDefault` absent), and `AndroidManifest.xml` declares `allowBackup="false"`, `excludeFromRecents="true"` on `MainActivity`, `stopWithTask="false"` on `SkipperAccessibilityService`, and zero `<uses-permission>` elements.
-- [ ] AC-2 — When the accessibility service is listed as enabled in Android settings but is not connected in process (`S-9`), the dashboard displays `"Service Stopped"` with `"Reconnect in Accessibility Settings"` (dispatching `ACTION_ACCESSIBILITY_SETTINGS`), transitions live to `"Service Active"` as soon as `SkipperAccessibilityService` connects (`onServiceConnected`), and transitions out of `"Service Active"` if unbound/destroyed, verified by unit/Robolectric Compose UI tests and screenshot `S-9`.
-- [ ] AC-3 — Below `KeywordsCard`, the **Background Reliability** card (`S-10`) displays `"Battery Optimization Active"` with `"Configure Battery Settings"` when battery optimizations apply, updates to `"Battery Unrestricted"` on resume once exempted, provides Android 13+ restricted-settings guidance with `"Open App Info"` (`ACTION_APPLICATION_DETAILS_SETTINGS` for the app package), and falls back safely without crashing when settings intents are unavailable, verified by Robolectric Compose UI tests and screenshots (`S-10a` optimized, `S-10b` unrestricted).
-- [ ] AC-4 — `.gitignore` excludes `keystore.properties`, `*.jks`, and `*.keystore`, and `app/build.gradle.kts` configures release signing when valid local keystore credentials are supplied (producing a signed release APK via `assembleRelease`) while leaving builds and `./scripts/check` green when credentials are absent.
-- [ ] AC-5 — Existing dashboard states (`S-1`..`S-8`, including `S-1` initial-viewport visibility without scrolling), `domain` zero-`android.*` purity, `ui` zero-`AccessibilityService` isolation, and `INV-1`/`INV-2` privacy guarantees remain intact.
-- [ ] AC-6 — `./scripts/check`, `./scripts/check --fast`, and `./scripts/doctor` succeed with zero failures.
+- [x] AC-1 — `accessibility_service_config.xml` scopes `packageNames` strictly to `"com.instagram.android"`, keeps `canRetrieveWindowContent="true"` and `canPerformGestures="true"`, omits `accessibilityFlags` (`flagRetrieveInteractiveWindows` and `flagDefault` absent), and `AndroidManifest.xml` declares `allowBackup="false"`, `excludeFromRecents="true"` on `MainActivity`, `stopWithTask="false"` on `SkipperAccessibilityService`, and zero `<uses-permission>` elements.
+- [x] AC-2 — When the accessibility service is listed as enabled in Android settings but is not connected in process (`S-9`), the dashboard displays `"Service Stopped"` with `"Reconnect in Accessibility Settings"` (dispatching `ACTION_ACCESSIBILITY_SETTINGS`), transitions live to `"Service Active"` as soon as `SkipperAccessibilityService` connects (`onServiceConnected`), and transitions out of `"Service Active"` if unbound/destroyed, verified by unit/Robolectric Compose UI tests and screenshot `S-9`.
+- [x] AC-3 — Below `KeywordsCard`, the **Background Reliability** card (`S-10`) displays `"Battery Optimization Active"` with `"Configure Battery Settings"` when battery optimizations apply, updates to `"Battery Unrestricted"` on resume once exempted, provides Android 13+ restricted-settings guidance with `"Open App Info"` (`ACTION_APPLICATION_DETAILS_SETTINGS` for the app package), and falls back safely without crashing when settings intents are unavailable, verified by Robolectric Compose UI tests and screenshots (`S-10a` optimized, `S-10b` unrestricted).
+- [x] AC-4 — `.gitignore` excludes `keystore.properties`, `*.jks`, and `*.keystore`, and `app/build.gradle.kts` configures release signing when valid local keystore credentials are supplied (producing a signed release APK via `assembleRelease`) while leaving builds and `./scripts/check` green when credentials are absent.
+- [x] AC-5 — Existing dashboard states (`S-1`..`S-8`, including `S-1` initial-viewport visibility without scrolling), `domain` zero-`android.*` purity, `ui` zero-`AccessibilityService` isolation, and `INV-1`/`INV-2` privacy guarantees remain intact.
+- [x] AC-6 — `./scripts/check`, `./scripts/check --fast`, and `./scripts/doctor` succeed with zero failures.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 1 |
+| Review findings: real / noise / deferred | 2 real / 0 noise / 0 deferred |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
