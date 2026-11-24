@@ -5,9 +5,12 @@
     <string name="dashboard_subtitle">On-device sponsored Instagram Reels skipper</string>
     <string name="service_status_active">Service Active</string>
     <string name="service_status_permission_required">Permission Required</string>
+    <string name="service_status_stopped">Service Stopped</string>
     <string name="service_status_active_desc">Accessibility service is enabled and listening locally for sponsored Instagram Reels.</string>
     <string name="service_status_disabled_desc">Enable Ad Reels Skipper in Android Accessibility Settings to skip sponsored Reels automatically.</string>
+    <string name="service_status_stopped_desc">The background service was stopped by the system. Re-enable Ad Reels Skipper in Accessibility Settings to resume automatic skipping.</string>
     <string name="enable_accessibility_service">Enable Accessibility Service</string>
+    <string name="reconnect_accessibility_service">Reconnect in Accessibility Settings</string>
     <string name="skipped_reels_label">Lifetime Skipped Reels</string>
     <string name="master_toggle_label">Auto-Skip Sponsored Reels</string>
     <string name="master_toggle_active_desc">Automatic skipping is active</string>
@@ -44,4 +47,13 @@
     <string name="day_short_fri">Fri</string>
     <string name="day_short_sat">Sat</string>
     <string name="day_short_sun">Sun</string>
+    <string name="background_reliability_title">Background Reliability</string>
+    <string name="battery_status_optimized">Battery Optimization Active</string>
+    <string name="battery_status_optimized_desc">Set battery usage to Unrestricted so the system does not stop background ad skipping when closing recent apps.</string>
+    <string name="battery_status_unrestricted">Battery Unrestricted</string>
+    <string name="battery_status_unrestricted_desc">Battery usage is unrestricted for reliable background operation.</string>
+    <string name="configure_battery_settings">Configure Battery Settings</string>
+    <string name="restricted_settings_tip_title">Android 13+ Sideloaded Install Tip</string>
+    <string name="restricted_settings_tip_desc">If the Accessibility toggle is locked on Android 13 or newer, open App Info → ⋮ → Allow restricted settings.</string>
+    <string name="open_app_info">Open App Info</string>
 </resources>

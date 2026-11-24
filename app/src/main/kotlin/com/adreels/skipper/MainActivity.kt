@@ -144,6 +144,8 @@ class MainActivity : ComponentActivity() {
             HomeScreen(
                 uiState = uiState,
                 onOpenAccessibilitySettings = ::openAccessibilitySettings,
+                onOpenBatterySettings = ::openBatteryOptimizationSettings,
+                onOpenAppInfo = ::openAppInfoSettings,
                 onToggleMaster = dashboardViewModel::setMasterEnabled,
                 onSkipDelayChange = dashboardViewModel::setSkipDelayMs,
                 onKeywordInputChange = dashboardViewModel::onKeywordInputChange,
@@ -177,7 +179,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    internal fun openBatteryOptimizationSettings() {
+    private fun openBatteryOptimizationSettings() {
         val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         try {
             activityStarter(intent)
@@ -186,7 +188,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    internal fun openAppInfoSettings() {
+    private fun openAppInfoSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", packageName, null),
