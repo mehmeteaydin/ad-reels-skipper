@@ -24,6 +24,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Scheduler abstraction enabling deterministic delayed skip testing without thread sleeps. */
@@ -82,6 +85,7 @@ class SkipperAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        _isConnectedFlow.value = true
         startObservingSettings()
     }
 
@@ -239,6 +243,7 @@ class SkipperAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        _isConnectedFlow.value = false
         delayScheduler.cancelAll()
         detector.reset()
         stopServiceScope()
@@ -246,6 +251,7 @@ class SkipperAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        _isConnectedFlow.value = false
         delayScheduler.cancelAll()
         detector.reset()
         stopServiceScope()
@@ -297,5 +303,12 @@ class SkipperAccessibilityService : AccessibilityService() {
     companion object {
         const val TAG = "SkipperAccessibility"
         const val TARGET_PACKAGE = SkipperConfig.TARGET_PACKAGE
+
+        private val _isConnectedFlow = MutableStateFlow(false)
+        val isConnectedFlow: StateFlow<Boolean> = _isConnectedFlow.asStateFlow()
+
+        internal fun setConnectedForTesting(connected: Boolean) {
+            _isConnectedFlow.value = connected
+        }
     }
 }
