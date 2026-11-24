@@ -8,6 +8,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+keystore.properties
+*.jks
+*.keystore
 
 # Logs
 *.log

@@ -1,6 +1,6 @@
 # Spec 0008 — Accessibility Hardening, Background Reliability, and Release Signing
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0008-plan.md`
 - Self-critique: done

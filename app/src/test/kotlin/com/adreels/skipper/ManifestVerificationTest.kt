@@ -26,6 +26,11 @@ class ManifestVerificationTest {
             skipperService.androidAttr("permission"),
             "Accessibility service must require $BIND_ACCESSIBILITY_PERMISSION"
         )
+        assertEquals(
+            "false",
+            skipperService.androidAttr("stopWithTask"),
+            "Accessibility service must declare stopWithTask=false"
+        )
 
         val configMetaData = skipperService.getElementsByTagName("meta-data").toElements().firstOrNull {
             it.androidAttr("name") == ACCESSIBILITY_META_NAME
@@ -40,6 +45,10 @@ class ManifestVerificationTest {
         val requestedPermissions = listOf("uses-permission", "uses-permission-sdk-23")
             .flatMap { manifestDoc.getElementsByTagName(it).toElements() }
             .map { it.androidAttr("name") }
+        assertTrue(
+            requestedPermissions.isEmpty(),
+            "Manifest MUST NOT declare any <uses-permission> elements, found: $requestedPermissions"
+        )
         assertFalse(
             requestedPermissions.contains(INTERNET_PERMISSION),
             "Manifest MUST NOT request $INTERNET_PERMISSION"
@@ -67,6 +76,15 @@ class ManifestVerificationTest {
             root.androidAttr("canPerformGestures"),
             "Accessibility config must enable gesture execution"
         )
+        assertFalse(
+            root.hasAttributeNS(ANDROID_NS, "accessibilityFlags"),
+            "Accessibility config must omit auxiliary accessibilityFlags such as flagRetrieveInteractiveWindows"
+        )
+        assertEquals(
+            "",
+            root.androidAttr("accessibilityFlags"),
+            "Accessibility config accessibilityFlags must remain unset"
+        )
     }
 
     @Test
@@ -74,6 +92,7 @@ class ManifestVerificationTest {
         val manifestDoc = parseXml(resolveAppFile("src/main/AndroidManifest.xml"))
 
         val application = manifestDoc.getElementsByTagName("application").toElements().single()
+        assertEquals("false", application.androidAttr("allowBackup"))
         assertEquals(CUSTOM_ICON_RESOURCE, application.androidAttr("icon"))
         assertEquals(CUSTOM_ICON_RESOURCE, application.androidAttr("roundIcon"))
         assertTrue(
@@ -85,6 +104,7 @@ class ManifestVerificationTest {
             it.androidAttr("name") == MAIN_ACTIVITY_CLASS
         }
         assertNotNull(mainActivity, "Manifest XML must declare <activity> $MAIN_ACTIVITY_CLASS")
+        assertEquals("true", mainActivity.androidAttr("excludeFromRecents"))
         assertEquals("true", mainActivity.androidAttr("exported"))
 
         val intentFilters = mainActivity.getElementsByTagName("intent-filter").toElements()

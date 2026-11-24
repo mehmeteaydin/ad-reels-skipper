@@ -1,4 +1,6 @@
+import java.io.File
 import java.nio.file.Files
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -6,6 +8,35 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.isFile) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+
+fun signingValue(propertyKey: String, envKey: String): String {
+    val fromProperties = keystoreProperties.getProperty(propertyKey)?.trim().orEmpty()
+    if (fromProperties.isNotEmpty()) return fromProperties
+    return System.getenv(envKey)?.trim().orEmpty()
+}
+
+val releaseStorePath = signingValue("storeFile", "SKIPPER_KEYSTORE_FILE")
+val releaseStorePassword = signingValue("storePassword", "SKIPPER_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "SKIPPER_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "SKIPPER_KEY_PASSWORD")
+val releaseStoreFile = releaseStorePath
+    .takeIf { it.isNotEmpty() }
+    ?.let { path ->
+        val candidate = File(path)
+        if (candidate.isAbsolute) candidate else rootProject.file(path)
+    }
+val hasReleaseSigning = releaseStoreFile != null &&
+    releaseStoreFile.isFile &&
+    releaseStorePassword.isNotEmpty() &&
+    releaseKeyAlias.isNotEmpty() &&
+    releaseKeyPassword.isNotEmpty()
 
 android {
     namespace = "com.adreels.skipper"
@@ -21,9 +52,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -100,6 +145,7 @@ tasks.withType<Test> {
     inputs.files(
         layout.projectDirectory.file("build.gradle.kts"),
         rootProject.file(".editorconfig"),
+        rootProject.file(".gitignore"),
         rootProject.file("config/detekt/detekt.yml"),
         rootProject.file("scripts/check.conf"),
         rootProject.file(".github/workflows/check.yml"),
