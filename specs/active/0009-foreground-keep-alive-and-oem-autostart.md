@@ -1,6 +1,6 @@
 # Spec 0009 — Foreground Keep-Alive Protection and OEM Autostart Guidance
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0009-plan.md`
 - Self-critique: done

@@ -31,6 +31,19 @@ class ManifestVerificationTest {
             skipperService.androidAttr("stopWithTask"),
             "Accessibility service must declare stopWithTask=false"
         )
+        assertEquals(
+            "specialUse",
+            skipperService.androidAttr("foregroundServiceType"),
+            "Accessibility service must declare foregroundServiceType=specialUse"
+        )
+        val specialUseProperty = skipperService.getElementsByTagName("property").toElements().firstOrNull {
+            it.androidAttr("name") == SPECIAL_USE_PROPERTY_NAME
+        }
+        assertNotNull(specialUseProperty, "Accessibility service must declare $SPECIAL_USE_PROPERTY_NAME property")
+        assertTrue(
+            specialUseProperty.androidAttr("value").isNotBlank(),
+            "$SPECIAL_USE_PROPERTY_NAME property must provide a non-blank subtype value"
+        )
 
         val configMetaData = skipperService.getElementsByTagName("meta-data").toElements().firstOrNull {
             it.androidAttr("name") == ACCESSIBILITY_META_NAME
@@ -45,9 +58,15 @@ class ManifestVerificationTest {
         val requestedPermissions = listOf("uses-permission", "uses-permission-sdk-23")
             .flatMap { manifestDoc.getElementsByTagName(it).toElements() }
             .map { it.androidAttr("name") }
-        assertTrue(
-            requestedPermissions.isEmpty(),
-            "Manifest MUST NOT declare any <uses-permission> elements, found: $requestedPermissions"
+        assertEquals(
+            ALLOWED_PERMISSIONS.size,
+            requestedPermissions.size,
+            "Manifest must declare strictly the 3 keep-alive permissions without duplicates, found: $requestedPermissions"
+        )
+        assertEquals(
+            ALLOWED_PERMISSIONS,
+            requestedPermissions.toSet(),
+            "Manifest permissions must match exact keep-alive allow-list, found: $requestedPermissions"
         )
         assertFalse(
             requestedPermissions.contains(INTERNET_PERMISSION),
@@ -104,7 +123,11 @@ class ManifestVerificationTest {
             it.androidAttr("name") == MAIN_ACTIVITY_CLASS
         }
         assertNotNull(mainActivity, "Manifest XML must declare <activity> $MAIN_ACTIVITY_CLASS")
-        assertEquals("true", mainActivity.androidAttr("excludeFromRecents"))
+        assertFalse(
+            mainActivity.hasAttributeNS(ANDROID_NS, "excludeFromRecents"),
+            "MainActivity must omit excludeFromRecents so Xiaomi/OEM users can optionally lock the card"
+        )
+        assertEquals("", mainActivity.androidAttr("excludeFromRecents"))
         assertEquals("true", mainActivity.androidAttr("exported"))
 
         val intentFilters = mainActivity.getElementsByTagName("intent-filter").toElements()
@@ -147,6 +170,12 @@ class ManifestVerificationTest {
         const val SERVICE_CLASS = ".service.SkipperAccessibilityService"
         const val BIND_ACCESSIBILITY_PERMISSION = "android.permission.BIND_ACCESSIBILITY_SERVICE"
         const val INTERNET_PERMISSION = "android.permission.INTERNET"
+        const val SPECIAL_USE_PROPERTY_NAME = "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        val ALLOWED_PERMISSIONS = setOf(
+            "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+            "android.permission.POST_NOTIFICATIONS",
+        )
         const val ACCESSIBILITY_META_NAME = "android.accessibilityservice"
         const val ACCESSIBILITY_CONFIG_RESOURCE = "@xml/accessibility_service_config"
         const val TARGET_PACKAGE = "com.instagram.android"

@@ -56,4 +56,17 @@
     <string name="restricted_settings_tip_title">Android 13+ Sideloaded Install Tip</string>
     <string name="restricted_settings_tip_desc">If the Accessibility toggle is locked on Android 13 or newer, open App Info → ⋮ → Allow restricted settings.</string>
     <string name="open_app_info">Open App Info</string>
+    <string name="special_use_fgs_subtype">Keeps local Instagram Reels sponsorship detection alive across OEM background cleanups.</string>
+    <string name="keep_alive_channel_name">Background Protection</string>
+    <string name="keep_alive_channel_desc">Silent ongoing notification that prevents the system from stopping Instagram Reels ad skipping.</string>
+    <string name="keep_alive_notification_title">Ad Reels Skipper Active</string>
+    <string name="keep_alive_notification_text">Monitoring Instagram Reels locally on-device</string>
+    <string name="keep_alive_status_active">Keep-Alive Notification Active</string>
+    <string name="keep_alive_status_active_desc">Silent protection notification is permitted so the system keeps background skipping alive.</string>
+    <string name="keep_alive_status_off">Keep-Alive Notification Off</string>
+    <string name="keep_alive_status_off_desc">Allow notifications on Android 13+ so the silent keep-alive service resists Clear All.</string>
+    <string name="enable_keep_alive_notification">Enable Keep-Alive Notification</string>
+    <string name="autostart_guidance_title">Xiaomi / OEM Autostart &amp; Lock</string>
+    <string name="autostart_guidance_desc">On Xiaomi MIUI/HyperOS, enable Autostart and optionally lock Ad Reels Skipper in Recent Apps so Clear All never stops it.</string>
+    <string name="open_autostart_settings">Open Autostart Settings</string>
 </resources>
