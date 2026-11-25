@@ -30,6 +30,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.adreels.skipper.AccessibilityServiceStatusChecker
 import com.adreels.skipper.BatteryOptimizationStatusChecker
 import com.adreels.skipper.MainActivity
+import com.adreels.skipper.NotificationPermissionStatusChecker
 import com.adreels.skipper.data.SkipperSettings
 import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
@@ -118,6 +119,7 @@ class HomeScreenTest {
             AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting { fakeServiceEnabled }
             BatteryOptimizationStatusChecker.setForTesting { false }
+            NotificationPermissionStatusChecker.setForTesting { true }
         }
 
         override fun after() {
@@ -125,6 +127,7 @@ class HomeScreenTest {
             AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting(null)
             BatteryOptimizationStatusChecker.setForTesting(null)
+            NotificationPermissionStatusChecker.setForTesting(null)
             SkipperAccessibilityService.setConnectedForTesting(false)
             SkipperSettingsRepositoryProvider.setForTesting(null)
         }

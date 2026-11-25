@@ -1,6 +1,8 @@
 package com.adreels.skipper.ui
 
+import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -17,6 +19,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.adreels.skipper.AccessibilityServiceStatusChecker
 import com.adreels.skipper.BatteryOptimizationStatusChecker
 import com.adreels.skipper.MainActivity
+import com.adreels.skipper.NotificationPermissionStatusChecker
 import com.adreels.skipper.data.SkipperSettings
 import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
@@ -79,16 +82,19 @@ class DashboardReliabilityTest {
     }
 
     private var fakeBatteryUnrestricted: Boolean = false
+    private var fakeKeepAliveNotificationEnabled: Boolean = false
 
     private val environmentRule = object : ExternalResource() {
         override fun before() {
             DashboardClock.testingTodayOverride = null
             fakeBatteryUnrestricted = false
+            fakeKeepAliveNotificationEnabled = false
             SkipperSettingsRepositoryProvider.setForTesting(FakeSettingsRepository())
             SkipperAccessibilityService.setConnectedForTesting(false)
             AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting(null)
             BatteryOptimizationStatusChecker.setForTesting { fakeBatteryUnrestricted }
+            NotificationPermissionStatusChecker.setForTesting { fakeKeepAliveNotificationEnabled }
 
             val context = RuntimeEnvironment.getApplication()
             Settings.Secure.putString(
@@ -109,6 +115,7 @@ class DashboardReliabilityTest {
             AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting(null)
             BatteryOptimizationStatusChecker.setForTesting(null)
+            NotificationPermissionStatusChecker.setForTesting(null)
             SkipperAccessibilityService.setConnectedForTesting(false)
             SkipperSettingsRepositoryProvider.setForTesting(null)
         }
@@ -193,6 +200,30 @@ class DashboardReliabilityTest {
             batteryButton.fetchSemanticsNode().boundsInRoot.height >= minTouchTargetPx() - 1f,
             "Configure Battery Settings button must satisfy 48dp touch target",
         )
+        composeTestRule.onNodeWithTag(DashboardTags.KEEP_ALIVE_STATUS_TEXT)
+            .performScrollTo()
+            .assertTextEquals("Keep-Alive Notification Off")
+        val keepAliveButton = composeTestRule.onNodeWithTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertTrue(
+            keepAliveButton.fetchSemanticsNode().boundsInRoot.height >= minTouchTargetPx() - 1f,
+            "Enable Keep-Alive Notification button must satisfy 48dp touch target",
+        )
+        var requestedPermission = false
+        composeTestRule.activity.notificationPermissionRequester = { requestedPermission = true }
+        keepAliveButton.performClick()
+        assertTrue(requestedPermission, "Expected inline Android 13+ notification permission prompt trigger")
+        composeTestRule.activity.notificationPermissionRequester = null
+
+        val autostartButton = composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertTrue(
+            autostartButton.fetchSemanticsNode().boundsInRoot.height >= minTouchTargetPx() - 1f,
+            "Open Autostart Settings button must satisfy 48dp touch target",
+        )
+
         val appInfoButton = composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON)
             .performScrollTo()
             .assertIsDisplayed()
@@ -203,12 +234,13 @@ class DashboardReliabilityTest {
 
         captureStateScreenshotIfRequested("S-10a-battery-optimized.png")
 
-        batteryButton.performClick()
+        batteryButton.performScrollTo().performClick()
         val batteryIntent = Shadows.shadowOf(composeTestRule.activity).nextStartedActivity
         assertEquals(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS, batteryIntent?.action)
 
-        // Exempting battery optimization and resuming updates S-10a -> S-10b and hides the warning CTA.
+        // Exempting battery optimization + enabling notifications and resuming updates S-10a -> S-10b.
         fakeBatteryUnrestricted = true
+        fakeKeepAliveNotificationEnabled = true
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
         composeTestRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         composeTestRule.waitForIdle()
@@ -217,6 +249,13 @@ class DashboardReliabilityTest {
             .performScrollTo()
             .assertTextEquals("Battery Unrestricted")
         composeTestRule.onNodeWithTag(DashboardTags.CONFIGURE_BATTERY_BUTTON).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(DashboardTags.KEEP_ALIVE_STATUS_TEXT)
+            .performScrollTo()
+            .assertTextEquals("Keep-Alive Notification Active")
+        composeTestRule.onNodeWithTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
+            .performScrollTo()
+            .assertIsDisplayed()
         composeTestRule.onNodeWithText("Android 13+ Sideloaded Install Tip")
             .performScrollTo()
             .assertIsDisplayed()
@@ -227,8 +266,17 @@ class DashboardReliabilityTest {
         captureStateScreenshotIfRequested("S-10b-battery-unrestricted.png")
     }
 
+    private fun recordIntentsWithFailure(failureForIntent: (Intent) -> Throwable?): List<Intent> {
+        val recorded = mutableListOf<Intent>()
+        composeTestRule.activity.activityStarter = { intent ->
+            recorded.add(intent)
+            failureForIntent(intent)?.let { throw it }
+        }
+        return recorded
+    }
+
     @Test
-    fun `app info action and battery fallback resolve safely when system settings activities are unavailable`() {
+    fun `app info battery autostart and notification fallbacks resolve safely when settings activities fail`() {
         composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON)
             .performScrollTo()
             .performClick()
@@ -236,12 +284,55 @@ class DashboardReliabilityTest {
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfoIntent?.action)
         assertEquals("package:${composeTestRule.activity.packageName}", appInfoIntent?.data?.toString())
 
+        // Verify Xiaomi MIUI Autostart intent and fallback on both ActivityNotFoundException and SecurityException.
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
+            .performScrollTo()
+            .performClick()
+        val autostartIntent = Shadows.shadowOf(composeTestRule.activity).nextStartedActivity
+        assertEquals(
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            autostartIntent?.component,
+        )
+
+        val autostartSecurityIntents = recordIntentsWithFailure { intent ->
+            if (intent.component?.packageName == "com.miui.securitycenter") {
+                SecurityException("MIUI permission denied")
+            } else {
+                null
+            }
+        }
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
+            .performScrollTo()
+            .performClick()
+        assertEquals(2, autostartSecurityIntents.size)
+        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, autostartSecurityIntents[1].action)
+
+        // Verify Keep-Alive Notification fallback once POST_NOTIFICATIONS is granted but system channel is off.
+        Shadows.shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        val notificationIntents = recordIntentsWithFailure { intent ->
+            if (intent.action == Settings.ACTION_APP_NOTIFICATION_SETTINGS) {
+                ActivityNotFoundException("No notification settings activity")
+            } else {
+                null
+            }
+        }
+        composeTestRule.onNodeWithTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON)
+            .performScrollTo()
+            .performClick()
+        assertEquals(
+            listOf(
+                Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            ),
+            notificationIntents.map { it.action },
+        )
+
         // Simulate device lacking ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS -> falls back to App Info.
-        val dispatchedIntents = mutableListOf<Intent>()
-        composeTestRule.activity.activityStarter = { intent ->
-            dispatchedIntents.add(intent)
+        val dispatchedIntents = recordIntentsWithFailure { intent ->
             if (intent.action == Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) {
-                throw ActivityNotFoundException("No battery optimization settings activity")
+                ActivityNotFoundException("No battery optimization settings activity")
+            } else {
+                null
             }
         }
         composeTestRule.onNodeWithTag(DashboardTags.CONFIGURE_BATTERY_BUTTON)
@@ -257,11 +348,11 @@ class DashboardReliabilityTest {
         assertEquals("package:${composeTestRule.activity.packageName}", dispatchedIntents[1].data?.toString())
 
         // Simulate missing settings activities everywhere -> all buttons stay crash-free.
-        composeTestRule.activity.activityStarter = { _ ->
-            throw ActivityNotFoundException("No settings activity")
-        }
+        recordIntentsWithFailure { ActivityNotFoundException("No settings activity") }
         composeTestRule.onNodeWithTag(DashboardTags.RECONNECT_SERVICE_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(DashboardTags.CONFIGURE_BATTERY_BUTTON).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON).performScrollTo().performClick()
+        composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithText("Service Stopped").performScrollTo().assertIsDisplayed()
     }

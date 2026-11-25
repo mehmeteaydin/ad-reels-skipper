@@ -76,6 +76,9 @@ internal object DashboardTags {
     const val BACKGROUND_RELIABILITY_CARD = "BackgroundReliabilityCard"
     const val BATTERY_STATUS_TEXT = "BatteryStatusText"
     const val CONFIGURE_BATTERY_BUTTON = "ConfigureBatteryButton"
+    const val KEEP_ALIVE_STATUS_TEXT = "KeepAliveStatusText"
+    const val ENABLE_KEEP_ALIVE_BUTTON = "EnableKeepAliveButton"
+    const val OPEN_AUTOSTART_BUTTON = "OpenAutostartButton"
     const val OPEN_APP_INFO_BUTTON = "OpenAppInfoButton"
     const val WEEKLY_ACTIVITY_CARD = "WeeklyActivityCard"
     const val WEEKLY_RANGE_TEXT = "WeeklyRangeText"
@@ -106,6 +109,8 @@ fun HomeScreen(
     uiState: DashboardUiState = DashboardUiState(),
     onOpenAccessibilitySettings: () -> Unit = {},
     onOpenBatterySettings: () -> Unit = {},
+    onEnableKeepAliveNotification: () -> Unit = {},
+    onOpenAutostartSettings: () -> Unit = {},
     onOpenAppInfo: () -> Unit = {},
     onToggleMaster: (Boolean) -> Unit = {},
     onSkipDelayChange: (Long) -> Unit = {},
@@ -159,7 +164,10 @@ fun HomeScreen(
                 )
                 BackgroundReliabilityCard(
                     isBatteryUnrestricted = uiState.isBatteryUnrestricted,
+                    isKeepAliveNotificationEnabled = uiState.isKeepAliveNotificationEnabled,
                     onOpenBatterySettings = onOpenBatterySettings,
+                    onEnableKeepAliveNotification = onEnableKeepAliveNotification,
+                    onOpenAutostartSettings = onOpenAutostartSettings,
                     onOpenAppInfo = onOpenAppInfo,
                 )
             }
@@ -944,10 +952,18 @@ private fun KeywordsCard(
 @Composable
 private fun BackgroundReliabilityCard(
     isBatteryUnrestricted: Boolean,
+    isKeepAliveNotificationEnabled: Boolean,
     onOpenBatterySettings: () -> Unit,
+    onEnableKeepAliveNotification: () -> Unit,
+    onOpenAutostartSettings: () -> Unit,
     onOpenAppInfo: () -> Unit,
 ) {
-    val indicatorColor = if (isBatteryUnrestricted) {
+    val batteryIndicatorColor = if (isBatteryUnrestricted) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    val keepAliveIndicatorColor = if (isKeepAliveNotificationEnabled) {
         MaterialTheme.colorScheme.secondary
     } else {
         MaterialTheme.colorScheme.error
@@ -971,28 +987,15 @@ private fun BackgroundReliabilityCard(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(indicatorColor),
-                )
-                Text(
-                    text = if (isBatteryUnrestricted) {
-                        stringResource(R.string.battery_status_unrestricted)
-                    } else {
-                        stringResource(R.string.battery_status_optimized)
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag(DashboardTags.BATTERY_STATUS_TEXT),
-                )
-            }
+            ReliabilityStatusRow(
+                indicatorColor = batteryIndicatorColor,
+                text = if (isBatteryUnrestricted) {
+                    stringResource(R.string.battery_status_unrestricted)
+                } else {
+                    stringResource(R.string.battery_status_optimized)
+                },
+                statusTag = DashboardTags.BATTERY_STATUS_TEXT,
+            )
             Text(
                 text = if (isBatteryUnrestricted) {
                     stringResource(R.string.battery_status_unrestricted_desc)
@@ -1012,6 +1015,57 @@ private fun BackgroundReliabilityCard(
                 ) {
                     Text(text = stringResource(R.string.configure_battery_settings))
                 }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            ReliabilityStatusRow(
+                indicatorColor = keepAliveIndicatorColor,
+                text = if (isKeepAliveNotificationEnabled) {
+                    stringResource(R.string.keep_alive_status_active)
+                } else {
+                    stringResource(R.string.keep_alive_status_off)
+                },
+                statusTag = DashboardTags.KEEP_ALIVE_STATUS_TEXT,
+            )
+            Text(
+                text = if (isKeepAliveNotificationEnabled) {
+                    stringResource(R.string.keep_alive_status_active_desc)
+                } else {
+                    stringResource(R.string.keep_alive_status_off_desc)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!isKeepAliveNotificationEnabled) {
+                Button(
+                    onClick = onEnableKeepAliveNotification,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON),
+                ) {
+                    Text(text = stringResource(R.string.enable_keep_alive_notification))
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Text(
+                text = stringResource(R.string.autostart_guidance_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.autostart_guidance_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = onOpenAutostartSettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(DashboardTags.OPEN_AUTOSTART_BUTTON),
+            ) {
+                Text(text = stringResource(R.string.open_autostart_settings))
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
             Text(
@@ -1035,6 +1089,32 @@ private fun BackgroundReliabilityCard(
                 Text(text = stringResource(R.string.open_app_info))
             }
         }
+    }
+}
+
+@Composable
+private fun ReliabilityStatusRow(
+    indicatorColor: androidx.compose.ui.graphics.Color,
+    text: String,
+    statusTag: String,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(indicatorColor),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag(statusTag),
+        )
     }
 }
 

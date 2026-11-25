@@ -15,7 +15,8 @@
 - **OS Enforcement**: The service is guarded by `android.permission.BIND_ACCESSIBILITY_SERVICE` so only the Android system framework can bind to it.
 - **Least-Privilege Accessibility & Manifest Scope**:
   - `accessibility_service_config.xml` restricts event listening strictly to `com.instagram.android` and omits auxiliary multi-window inspection flags (`flagRetrieveInteractiveWindows`, `flagDefault`), reading only the active window (`rootInActiveWindow`).
-  - `AndroidManifest.xml` declares zero `<uses-permission>` elements and sets `android:allowBackup="false"` so local preferences cannot be backed up off-device.
+  - `AndroidManifest.xml` declares exclusively the 3-permission allow-list required for silent keep-alive protection (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`) with zero `INTERNET` or extra permissions, and sets `android:allowBackup="false"` so local preferences cannot be backed up off-device.
+  - When connected with `Master Toggle` `ON`, `SkipperAccessibilityService` displays a static, low-priority (`IMPORTANCE_MIN`) ongoing notification whose text never contains inspected screen content or ad keywords (`INV-1`).
 - **Zero Network Guarantee**: The app does not declare or request `android.permission.INTERNET`. The OS forbids all outbound and inbound network traffic.
 - **Signing Secrets**: Optional local release APK signing uses untracked `keystore.properties` or `SKIPPER_KEYSTORE_*` environment variables (`keystore.properties`, `*.jks`, and `*.keystore` are gitignored and must never enter the repo).
 

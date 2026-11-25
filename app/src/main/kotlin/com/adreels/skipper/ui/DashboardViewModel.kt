@@ -32,6 +32,7 @@ data class DashboardUiState(
     val serviceConnectionState: ServiceConnectionState = ServiceConnectionState.PERMISSION_REQUIRED,
     val isServiceEnabled: Boolean = serviceConnectionState == ServiceConnectionState.ACTIVE,
     val isBatteryUnrestricted: Boolean = false,
+    val isKeepAliveNotificationEnabled: Boolean = true,
     val isMasterEnabled: Boolean = true,
     val skipDelayMs: Long = SkipperConfig.DEFAULT_SKIP_DELAY_MS,
     val builtInKeywords: List<String> = SkipperConfig.BUILT_IN_DISPLAY_KEYWORDS,
@@ -60,6 +61,7 @@ class DashboardViewModel(
         ServiceConnectionState.PERMISSION_REQUIRED
     },
     private val initialBatteryUnrestricted: Boolean = false,
+    private val initialKeepAliveNotificationEnabled: Boolean = true,
 ) : ViewModel() {
 
     private val stateLock = Any()
@@ -69,6 +71,7 @@ class DashboardViewModel(
         buildInitialState(
             connectionState = initialConnectionState,
             isBatteryUnrestricted = initialBatteryUnrestricted,
+            isKeepAliveNotificationEnabled = initialKeepAliveNotificationEnabled,
         ),
     )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
@@ -103,10 +106,11 @@ class DashboardViewModel(
         }
     }
 
-    /** Updates connection state, battery exemption status, and weekly buckets (`onResume` / live updates). */
+    /** Updates connection state, battery exemption status, keep-alive notification state, and weekly buckets. */
     fun refreshPlatformStatus(
         connectionState: ServiceConnectionState,
         isBatteryUnrestricted: Boolean,
+        isKeepAliveNotificationEnabled: Boolean = _uiState.value.isKeepAliveNotificationEnabled,
     ) {
         val activeToday = todayProvider()
         val dailyCounts = synchronized(stateLock) { latestDailySkipCounts }
@@ -119,6 +123,7 @@ class DashboardViewModel(
                 serviceConnectionState = connectionState,
                 isServiceEnabled = connectionState == ServiceConnectionState.ACTIVE,
                 isBatteryUnrestricted = isBatteryUnrestricted,
+                isKeepAliveNotificationEnabled = isKeepAliveNotificationEnabled,
                 today = activeToday,
                 currentWeek = summary.currentWeek,
                 archivedWeeks = summary.archivedWeeks,
@@ -217,6 +222,7 @@ class DashboardViewModel(
     private fun buildInitialState(
         connectionState: ServiceConnectionState,
         isBatteryUnrestricted: Boolean,
+        isKeepAliveNotificationEnabled: Boolean,
     ): DashboardUiState {
         val settings = repository.settingsFlow.value
         val activeToday = todayProvider()
@@ -228,6 +234,7 @@ class DashboardViewModel(
             serviceConnectionState = connectionState,
             isServiceEnabled = connectionState == ServiceConnectionState.ACTIVE,
             isBatteryUnrestricted = isBatteryUnrestricted,
+            isKeepAliveNotificationEnabled = isKeepAliveNotificationEnabled,
             isMasterEnabled = settings.isMasterEnabled,
             skipDelayMs = settings.skipDelayMs,
             customKeywords = settings.customKeywords.toList(),
@@ -273,6 +280,7 @@ class DashboardViewModel(
                 ServiceConnectionState.PERMISSION_REQUIRED
             },
             initialBatteryUnrestricted: Boolean = false,
+            initialKeepAliveNotificationEnabled: Boolean = true,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -283,6 +291,7 @@ class DashboardViewModel(
                         todayProvider = todayProvider,
                         initialConnectionState = initialConnectionState,
                         initialBatteryUnrestricted = initialBatteryUnrestricted,
+                        initialKeepAliveNotificationEnabled = initialKeepAliveNotificationEnabled,
                     ) as T
                 }
             }

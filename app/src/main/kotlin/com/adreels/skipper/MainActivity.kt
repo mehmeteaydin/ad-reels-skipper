@@ -1,10 +1,14 @@
 package com.adreels.skipper
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
@@ -12,8 +16,11 @@ import android.view.accessibility.AccessibilityManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -112,15 +119,58 @@ internal object BatteryOptimizationStatusChecker {
     }
 }
 
+/** Queries whether silent keep-alive notifications are enabled and permitted (`AC-3`). */
+internal object NotificationPermissionStatusChecker {
+    @Volatile
+    private var testingOverride: (() -> Boolean)? = null
+
+    fun isEnabled(context: Context): Boolean {
+        testingOverride?.let { return it() }
+        return try {
+            val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            if (!notificationsEnabled) return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
+    fun setForTesting(checker: (() -> Boolean)?) {
+        testingOverride = checker
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     internal var activityStarter: (Intent) -> Unit = ::startActivity
+    internal var notificationPermissionRequester: (() -> Unit)? = null
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        refreshPlatformStatuses()
+        if (
+            !granted &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            openNotificationSettings()
+        }
+    }
 
     private val dashboardViewModel: DashboardViewModel by viewModels {
         DashboardViewModel.factory(
             repository = SkipperSettingsRepositoryProvider.get(applicationContext),
             initialConnectionState = AccessibilityServiceStatusChecker.resolveConnectionState(applicationContext),
             initialBatteryUnrestricted = BatteryOptimizationStatusChecker.isUnrestricted(applicationContext),
+            initialKeepAliveNotificationEnabled = NotificationPermissionStatusChecker.isEnabled(applicationContext),
             todayProvider = DashboardClock::today,
         )
     }
@@ -141,6 +191,8 @@ class MainActivity : ComponentActivity() {
                 uiState = uiState,
                 onOpenAccessibilitySettings = ::openAccessibilitySettings,
                 onOpenBatterySettings = ::openBatteryOptimizationSettings,
+                onEnableKeepAliveNotification = ::enableKeepAliveNotification,
+                onOpenAutostartSettings = ::openAutostartSettings,
                 onOpenAppInfo = ::openAppInfoSettings,
                 onToggleMaster = dashboardViewModel::setMasterEnabled,
                 onSkipDelayChange = dashboardViewModel::setSkipDelayMs,
@@ -163,6 +215,7 @@ class MainActivity : ComponentActivity() {
         dashboardViewModel.refreshPlatformStatus(
             connectionState = AccessibilityServiceStatusChecker.resolveConnectionState(applicationContext),
             isBatteryUnrestricted = BatteryOptimizationStatusChecker.isUnrestricted(applicationContext),
+            isKeepAliveNotificationEnabled = NotificationPermissionStatusChecker.isEnabled(applicationContext),
         )
     }
 
@@ -180,6 +233,49 @@ class MainActivity : ComponentActivity() {
         try {
             activityStarter(intent)
         } catch (_: ActivityNotFoundException) {
+            openAppInfoSettings()
+        }
+    }
+
+    private fun enableKeepAliveNotification() {
+        val customRequester = notificationPermissionRequester
+        if (customRequester != null) {
+            customRequester()
+            return
+        }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            openNotificationSettings()
+        }
+    }
+
+    private fun openNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        try {
+            activityStarter(intent)
+        } catch (_: ActivityNotFoundException) {
+            openAppInfoSettings()
+        }
+    }
+
+    private fun openAutostartSettings() {
+        val intent = Intent().apply {
+            component = ComponentName(
+                "com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            )
+        }
+        try {
+            activityStarter(intent)
+        } catch (_: ActivityNotFoundException) {
+            openAppInfoSettings()
+        } catch (_: SecurityException) {
             openAppInfoSettings()
         }
     }
