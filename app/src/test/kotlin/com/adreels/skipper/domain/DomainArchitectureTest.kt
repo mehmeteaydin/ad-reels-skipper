@@ -199,6 +199,7 @@ class DomainArchitectureTest {
         listOf(
             "inputs.files(",
             ".editorconfig",
+            ".gitignore",
             "config/detekt/detekt.yml",
             "scripts/check.conf",
             ".github/workflows/check.yml",
@@ -313,6 +314,32 @@ class DomainArchitectureTest {
             assertTrue(execIndex >= 0, "$jobName job must run $execCommand")
             assertTrue(gradleSetupIndex in 0 until execIndex, "$jobName job must run setup-gradle@v4 before $execCommand")
             assertTrue(chmodIndex in 0 until execIndex, "$jobName job must run scoped chmod +x before $execCommand")
+        }
+    }
+
+    @Test
+    fun `gitignore excludes signing secrets and gradle configures conditional release signing`() {
+        val gitignoreLines = resolveRepoFile(".gitignore").readLines().map { it.trim() }
+        assertTrue(gitignoreLines.contains("keystore.properties"), ".gitignore must exclude keystore.properties")
+        assertTrue(gitignoreLines.contains("*.jks"), ".gitignore must exclude *.jks keystores")
+        assertTrue(gitignoreLines.contains("*.keystore"), ".gitignore must exclude *.keystore keystores")
+
+        val gradleBuild = stripKotlinComments(resolveRepoFile("app/build.gradle.kts").readText())
+        listOf(
+            "keystore.properties",
+            "SKIPPER_KEYSTORE_FILE",
+            "SKIPPER_KEYSTORE_PASSWORD",
+            "SKIPPER_KEY_ALIAS",
+            "SKIPPER_KEY_PASSWORD",
+            "hasReleaseSigning",
+            "releaseStoreFile.isFile",
+            "signingConfigs {",
+            "signingConfig = signingConfigs.getByName(\"release\")",
+        ).forEach { expectedToken ->
+            assertTrue(
+                gradleBuild.contains(expectedToken),
+                "app/build.gradle.kts must configure optional release signing with $expectedToken",
+            )
         }
     }
 }

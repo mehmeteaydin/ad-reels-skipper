@@ -28,13 +28,16 @@ import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.adreels.skipper.AccessibilityServiceStatusChecker
+import com.adreels.skipper.BatteryOptimizationStatusChecker
 import com.adreels.skipper.MainActivity
+import com.adreels.skipper.NotificationPermissionStatusChecker
 import com.adreels.skipper.data.SkipperSettings
 import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.data.SkipperSettingsRepositoryProvider
 import com.adreels.skipper.domain.KeywordValidationResult
 import com.adreels.skipper.domain.KeywordValidator
 import com.adreels.skipper.domain.SkipperConfig
+import com.adreels.skipper.service.SkipperAccessibilityService
 import java.io.File
 import java.io.FileOutputStream
 import java.time.DayOfWeek
@@ -112,12 +115,20 @@ class HomeScreenTest {
             fakeRepository = InMemorySkipperSettingsRepository()
             fakeServiceEnabled = false
             SkipperSettingsRepositoryProvider.setForTesting(fakeRepository)
+            SkipperAccessibilityService.setConnectedForTesting(false)
+            AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting { fakeServiceEnabled }
+            BatteryOptimizationStatusChecker.setForTesting { false }
+            NotificationPermissionStatusChecker.setForTesting { true }
         }
 
         override fun after() {
             DashboardClock.testingTodayOverride = null
+            AccessibilityServiceStatusChecker.setStateForTesting(null)
             AccessibilityServiceStatusChecker.setForTesting(null)
+            BatteryOptimizationStatusChecker.setForTesting(null)
+            NotificationPermissionStatusChecker.setForTesting(null)
+            SkipperAccessibilityService.setConnectedForTesting(false)
             SkipperSettingsRepositoryProvider.setForTesting(null)
         }
     }

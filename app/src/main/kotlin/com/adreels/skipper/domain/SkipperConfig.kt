@@ -1,5 +1,12 @@
 package com.adreels.skipper.domain
 
+/** Live monitoring connection state distinguishing disabled, active, and disconnected states (`AC-2`). */
+enum class ServiceConnectionState {
+    PERMISSION_REQUIRED,
+    ACTIVE,
+    STOPPED,
+}
+
 /**
  * Pure domain configuration parameters governing Instagram Reels ad detection and timing.
  */

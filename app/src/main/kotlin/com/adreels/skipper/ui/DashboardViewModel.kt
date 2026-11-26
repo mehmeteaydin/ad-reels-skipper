@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.adreels.skipper.data.SkipperSettingsRepository
 import com.adreels.skipper.domain.KeywordValidationError
 import com.adreels.skipper.domain.KeywordValidationResult
+import com.adreels.skipper.domain.ServiceConnectionState
 import com.adreels.skipper.domain.SkipperConfig
 import com.adreels.skipper.domain.WeeklySkipAggregator
 import com.adreels.skipper.domain.WeeklySkipRecord
@@ -26,9 +27,12 @@ internal object DashboardClock {
     fun today(): LocalDate = testingTodayOverride?.invoke() ?: LocalDate.now()
 }
 
-/** Unidirectional UI state backing the single-screen Material 3 Dashboard (`AC-4`..`AC-6`). */
+/** Unidirectional UI state backing the single-screen Material 3 Dashboard (`AC-2`..`AC-6`). */
 data class DashboardUiState(
-    val isServiceEnabled: Boolean = false,
+    val serviceConnectionState: ServiceConnectionState = ServiceConnectionState.PERMISSION_REQUIRED,
+    val isServiceEnabled: Boolean = serviceConnectionState == ServiceConnectionState.ACTIVE,
+    val isBatteryUnrestricted: Boolean = false,
+    val isKeepAliveNotificationEnabled: Boolean = true,
     val isMasterEnabled: Boolean = true,
     val skipDelayMs: Long = SkipperConfig.DEFAULT_SKIP_DELAY_MS,
     val builtInKeywords: List<String> = SkipperConfig.BUILT_IN_DISPLAY_KEYWORDS,
@@ -46,17 +50,30 @@ data class DashboardUiState(
     val selectedArchivedWeekStart: LocalDate? = null,
 )
 
-/** Manages persisted settings updates, weekly skip summaries, keyword validation, and service permission state for UI. */
+/** Manages persisted settings updates, weekly skip summaries, keyword validation, and platform status for UI. */
 class DashboardViewModel(
     private val repository: SkipperSettingsRepository,
     initialServiceEnabled: Boolean = false,
     private val todayProvider: () -> LocalDate = DashboardClock::today,
+    private val initialConnectionState: ServiceConnectionState = if (initialServiceEnabled) {
+        ServiceConnectionState.ACTIVE
+    } else {
+        ServiceConnectionState.PERMISSION_REQUIRED
+    },
+    private val initialBatteryUnrestricted: Boolean = false,
+    private val initialKeepAliveNotificationEnabled: Boolean = true,
 ) : ViewModel() {
 
     private val stateLock = Any()
     private var latestDailySkipCounts: Map<LocalDate, Int> = repository.settingsFlow.value.dailySkipCounts
 
-    private val _uiState = MutableStateFlow(buildInitialState(initialServiceEnabled))
+    private val _uiState = MutableStateFlow(
+        buildInitialState(
+            connectionState = initialConnectionState,
+            isBatteryUnrestricted = initialBatteryUnrestricted,
+            isKeepAliveNotificationEnabled = initialKeepAliveNotificationEnabled,
+        ),
+    )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
@@ -89,8 +106,12 @@ class DashboardViewModel(
         }
     }
 
-    /** Updates permission status and refreshes active/archived weekly buckets for the current date (`onResume`). */
-    fun refreshServiceStatus(isEnabled: Boolean) {
+    /** Updates connection state, battery exemption status, keep-alive notification state, and weekly buckets. */
+    fun refreshPlatformStatus(
+        connectionState: ServiceConnectionState,
+        isBatteryUnrestricted: Boolean,
+        isKeepAliveNotificationEnabled: Boolean = _uiState.value.isKeepAliveNotificationEnabled,
+    ) {
         val activeToday = todayProvider()
         val dailyCounts = synchronized(stateLock) { latestDailySkipCounts }
         val summary = WeeklySkipAggregator.summarize(
@@ -99,7 +120,10 @@ class DashboardViewModel(
         )
         _uiState.update { current ->
             current.copy(
-                isServiceEnabled = isEnabled,
+                serviceConnectionState = connectionState,
+                isServiceEnabled = connectionState == ServiceConnectionState.ACTIVE,
+                isBatteryUnrestricted = isBatteryUnrestricted,
+                isKeepAliveNotificationEnabled = isKeepAliveNotificationEnabled,
                 today = activeToday,
                 currentWeek = summary.currentWeek,
                 archivedWeeks = summary.archivedWeeks,
@@ -195,7 +219,11 @@ class DashboardViewModel(
         }
     }
 
-    private fun buildInitialState(initialServiceEnabled: Boolean): DashboardUiState {
+    private fun buildInitialState(
+        connectionState: ServiceConnectionState,
+        isBatteryUnrestricted: Boolean,
+        isKeepAliveNotificationEnabled: Boolean,
+    ): DashboardUiState {
         val settings = repository.settingsFlow.value
         val activeToday = todayProvider()
         val summary = WeeklySkipAggregator.summarize(
@@ -203,7 +231,10 @@ class DashboardViewModel(
             today = activeToday,
         )
         return DashboardUiState(
-            isServiceEnabled = initialServiceEnabled,
+            serviceConnectionState = connectionState,
+            isServiceEnabled = connectionState == ServiceConnectionState.ACTIVE,
+            isBatteryUnrestricted = isBatteryUnrestricted,
+            isKeepAliveNotificationEnabled = isKeepAliveNotificationEnabled,
             isMasterEnabled = settings.isMasterEnabled,
             skipDelayMs = settings.skipDelayMs,
             customKeywords = settings.customKeywords.toList(),
@@ -243,6 +274,13 @@ class DashboardViewModel(
             repository: SkipperSettingsRepository,
             initialServiceEnabled: Boolean = false,
             todayProvider: () -> LocalDate = DashboardClock::today,
+            initialConnectionState: ServiceConnectionState = if (initialServiceEnabled) {
+                ServiceConnectionState.ACTIVE
+            } else {
+                ServiceConnectionState.PERMISSION_REQUIRED
+            },
+            initialBatteryUnrestricted: Boolean = false,
+            initialKeepAliveNotificationEnabled: Boolean = true,
         ): ViewModelProvider.Factory {
             return object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -251,6 +289,9 @@ class DashboardViewModel(
                         repository = repository,
                         initialServiceEnabled = initialServiceEnabled,
                         todayProvider = todayProvider,
+                        initialConnectionState = initialConnectionState,
+                        initialBatteryUnrestricted = initialBatteryUnrestricted,
+                        initialKeepAliveNotificationEnabled = initialKeepAliveNotificationEnabled,
                     ) as T
                 }
             }

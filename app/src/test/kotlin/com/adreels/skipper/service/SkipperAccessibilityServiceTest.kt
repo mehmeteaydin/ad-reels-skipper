@@ -200,6 +200,7 @@ class SkipperAccessibilityServiceTest {
 
     @Before
     fun setUp() {
+        SkipperAccessibilityService.setConnectedForTesting(false)
         fakeClockMs = 1_000L
         scheduler = RecordingDelayScheduler()
         settingsRepository = FakeSkipperSettingsRepository()
@@ -213,6 +214,7 @@ class SkipperAccessibilityServiceTest {
 
     @After
     fun tearDown() {
+        SkipperAccessibilityService.setConnectedForTesting(false)
         SkipperSettingsRepositoryProvider.setForTesting(null)
     }
 
@@ -863,5 +865,46 @@ class SkipperAccessibilityServiceTest {
             currentThread.uncaughtExceptionHandler = previousThreadHandler
             Thread.setDefaultUncaughtExceptionHandler(previousDefaultHandler)
         }
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35])
+class SkipperServiceConnectionLifecycleTest {
+
+    @Before
+    fun setUp() {
+        SkipperAccessibilityService.setConnectedForTesting(false)
+    }
+
+    @After
+    fun tearDown() {
+        SkipperAccessibilityService.setConnectedForTesting(false)
+        SkipperSettingsRepositoryProvider.setForTesting(null)
+    }
+
+    @Test
+    fun `tracks live process binding state across onServiceConnected onUnbind and onDestroy`() {
+        SkipperSettingsRepositoryProvider.setForTesting(FakeSkipperSettingsRepository())
+        assertFalse(SkipperAccessibilityService.isConnectedFlow.value)
+
+        val controller = Robolectric.buildService(SkipperAccessibilityService::class.java).create()
+        val lifecycleService = controller.get()
+        val connectMethod = SkipperAccessibilityService::class.java.getDeclaredMethod("onServiceConnected").apply {
+            isAccessible = true
+        }
+        assertFalse(SkipperAccessibilityService.isConnectedFlow.value)
+
+        connectMethod.invoke(lifecycleService)
+        assertTrue(SkipperAccessibilityService.isConnectedFlow.value)
+
+        lifecycleService.onUnbind(null)
+        assertFalse(SkipperAccessibilityService.isConnectedFlow.value)
+
+        connectMethod.invoke(lifecycleService)
+        assertTrue(SkipperAccessibilityService.isConnectedFlow.value)
+
+        controller.destroy()
+        assertFalse(SkipperAccessibilityService.isConnectedFlow.value)
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.adreels.skipper.R
 import com.adreels.skipper.domain.DailySkipEntry
 import com.adreels.skipper.domain.KeywordValidationError
+import com.adreels.skipper.domain.ServiceConnectionState
 import com.adreels.skipper.domain.SkipperConfig
 import com.adreels.skipper.domain.WeeklySkipAggregator
 import com.adreels.skipper.domain.WeeklySkipRecord
@@ -65,11 +66,20 @@ import java.time.LocalDate
 import kotlin.math.roundToLong
 
 internal object DashboardTags {
+    const val SERVICE_STATUS_CARD = "ServiceStatusCard"
+    const val RECONNECT_SERVICE_BUTTON = "ReconnectServiceButton"
     const val MASTER_TOGGLE = "MasterToggleSwitch"
     const val SKIP_DELAY_SLIDER = "SkipDelaySlider"
     const val KEYWORD_INPUT = "KeywordInputField"
     const val ADD_KEYWORD_BUTTON = "AddKeywordButton"
     const val KEYWORD_ERROR_TEXT = "KeywordErrorText"
+    const val BACKGROUND_RELIABILITY_CARD = "BackgroundReliabilityCard"
+    const val BATTERY_STATUS_TEXT = "BatteryStatusText"
+    const val CONFIGURE_BATTERY_BUTTON = "ConfigureBatteryButton"
+    const val KEEP_ALIVE_STATUS_TEXT = "KeepAliveStatusText"
+    const val ENABLE_KEEP_ALIVE_BUTTON = "EnableKeepAliveButton"
+    const val OPEN_AUTOSTART_BUTTON = "OpenAutostartButton"
+    const val OPEN_APP_INFO_BUTTON = "OpenAppInfoButton"
     const val WEEKLY_ACTIVITY_CARD = "WeeklyActivityCard"
     const val WEEKLY_RANGE_TEXT = "WeeklyRangeText"
     const val WEEKLY_TOTAL_TEXT = "WeeklyTotalText"
@@ -89,15 +99,19 @@ internal object DashboardTags {
 }
 
 /**
- * Single-screen Material 3 Dashboard displaying service permission onboarding (`S-1`), active/paused
+ * Single-screen Material 3 Dashboard displaying service onboarding/recovery (`S-1`, `S-9`), active/paused
  * skipping controls (`S-2`/`S-3`), weekly activity chart + archive (`S-5`..`S-8`), delay slider,
- * lifetime skip metrics, and custom keywords (`S-4`).
+ * custom keywords (`S-4`), and background reliability tips (`S-10`).
  */
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
     uiState: DashboardUiState = DashboardUiState(),
     onOpenAccessibilitySettings: () -> Unit = {},
+    onOpenBatterySettings: () -> Unit = {},
+    onEnableKeepAliveNotification: () -> Unit = {},
+    onOpenAutostartSettings: () -> Unit = {},
+    onOpenAppInfo: () -> Unit = {},
     onToggleMaster: (Boolean) -> Unit = {},
     onSkipDelayChange: (Long) -> Unit = {},
     onKeywordInputChange: (String) -> Unit = {},
@@ -122,7 +136,7 @@ fun HomeScreen(
             ) {
                 DashboardHeader()
                 ServiceStatusCard(
-                    isServiceEnabled = uiState.isServiceEnabled,
+                    serviceConnectionState = uiState.serviceConnectionState,
                     onOpenAccessibilitySettings = onOpenAccessibilitySettings,
                 )
                 MetricsAndMasterCard(
@@ -147,6 +161,14 @@ fun HomeScreen(
                     onKeywordInputChange = onKeywordInputChange,
                     onAddKeyword = onAddKeyword,
                     onRemoveKeyword = onRemoveKeyword,
+                )
+                BackgroundReliabilityCard(
+                    isBatteryUnrestricted = uiState.isBatteryUnrestricted,
+                    isKeepAliveNotificationEnabled = uiState.isKeepAliveNotificationEnabled,
+                    onOpenBatterySettings = onOpenBatterySettings,
+                    onEnableKeepAliveNotification = onEnableKeepAliveNotification,
+                    onOpenAutostartSettings = onOpenAutostartSettings,
+                    onOpenAppInfo = onOpenAppInfo,
                 )
             }
 
@@ -182,27 +204,30 @@ private fun DashboardHeader() {
 
 @Composable
 private fun ServiceStatusCard(
-    isServiceEnabled: Boolean,
+    serviceConnectionState: ServiceConnectionState,
     onOpenAccessibilitySettings: () -> Unit,
 ) {
-    val containerColor = if (isServiceEnabled) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        MaterialTheme.colorScheme.tertiaryContainer
+    val containerColor = when (serviceConnectionState) {
+        ServiceConnectionState.ACTIVE -> MaterialTheme.colorScheme.secondaryContainer
+        ServiceConnectionState.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.tertiaryContainer
+        ServiceConnectionState.STOPPED -> MaterialTheme.colorScheme.errorContainer
     }
-    val contentColor = if (isServiceEnabled) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
-        MaterialTheme.colorScheme.onTertiaryContainer
+    val contentColor = when (serviceConnectionState) {
+        ServiceConnectionState.ACTIVE -> MaterialTheme.colorScheme.onSecondaryContainer
+        ServiceConnectionState.PERMISSION_REQUIRED -> MaterialTheme.colorScheme.onTertiaryContainer
+        ServiceConnectionState.STOPPED -> MaterialTheme.colorScheme.onErrorContainer
     }
-    val indicatorColor = if (isServiceEnabled) {
-        MaterialTheme.colorScheme.secondary
-    } else {
-        MaterialTheme.colorScheme.error
+    val indicatorColor = when (serviceConnectionState) {
+        ServiceConnectionState.ACTIVE -> MaterialTheme.colorScheme.secondary
+        ServiceConnectionState.PERMISSION_REQUIRED,
+        ServiceConnectionState.STOPPED,
+        -> MaterialTheme.colorScheme.error
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(DashboardTags.SERVICE_STATUS_CARD),
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -224,31 +249,48 @@ private fun ServiceStatusCard(
                         .background(indicatorColor),
                 )
                 Text(
-                    text = if (isServiceEnabled) {
-                        stringResource(R.string.service_status_active)
-                    } else {
-                        stringResource(R.string.service_status_permission_required)
+                    text = when (serviceConnectionState) {
+                        ServiceConnectionState.ACTIVE -> stringResource(R.string.service_status_active)
+                        ServiceConnectionState.PERMISSION_REQUIRED -> stringResource(R.string.service_status_permission_required)
+                        ServiceConnectionState.STOPPED -> stringResource(R.string.service_status_stopped)
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             Text(
-                text = if (isServiceEnabled) {
-                    stringResource(R.string.service_status_active_desc)
-                } else {
-                    stringResource(R.string.service_status_disabled_desc)
+                text = when (serviceConnectionState) {
+                    ServiceConnectionState.ACTIVE -> stringResource(R.string.service_status_active_desc)
+                    ServiceConnectionState.PERMISSION_REQUIRED -> stringResource(R.string.service_status_disabled_desc)
+                    ServiceConnectionState.STOPPED -> stringResource(R.string.service_status_stopped_desc)
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )
-            if (!isServiceEnabled) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Button(
-                    onClick = onOpenAccessibilitySettings,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.enable_accessibility_service))
+            when (serviceConnectionState) {
+                ServiceConnectionState.PERMISSION_REQUIRED -> {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = onOpenAccessibilitySettings,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(text = stringResource(R.string.enable_accessibility_service))
+                    }
                 }
+
+                ServiceConnectionState.STOPPED -> {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(
+                        onClick = onOpenAccessibilitySettings,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag(DashboardTags.RECONNECT_SERVICE_BUTTON),
+                    ) {
+                        Text(text = stringResource(R.string.reconnect_accessibility_service))
+                    }
+                }
+
+                ServiceConnectionState.ACTIVE -> Unit
             }
         }
     }
@@ -904,6 +946,175 @@ private fun KeywordsCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BackgroundReliabilityCard(
+    isBatteryUnrestricted: Boolean,
+    isKeepAliveNotificationEnabled: Boolean,
+    onOpenBatterySettings: () -> Unit,
+    onEnableKeepAliveNotification: () -> Unit,
+    onOpenAutostartSettings: () -> Unit,
+    onOpenAppInfo: () -> Unit,
+) {
+    val batteryIndicatorColor = if (isBatteryUnrestricted) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    val keepAliveIndicatorColor = if (isKeepAliveNotificationEnabled) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(DashboardTags.BACKGROUND_RELIABILITY_CARD),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.background_reliability_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            ReliabilityStatusRow(
+                indicatorColor = batteryIndicatorColor,
+                text = if (isBatteryUnrestricted) {
+                    stringResource(R.string.battery_status_unrestricted)
+                } else {
+                    stringResource(R.string.battery_status_optimized)
+                },
+                statusTag = DashboardTags.BATTERY_STATUS_TEXT,
+            )
+            Text(
+                text = if (isBatteryUnrestricted) {
+                    stringResource(R.string.battery_status_unrestricted_desc)
+                } else {
+                    stringResource(R.string.battery_status_optimized_desc)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!isBatteryUnrestricted) {
+                Button(
+                    onClick = onOpenBatterySettings,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(DashboardTags.CONFIGURE_BATTERY_BUTTON),
+                ) {
+                    Text(text = stringResource(R.string.configure_battery_settings))
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            ReliabilityStatusRow(
+                indicatorColor = keepAliveIndicatorColor,
+                text = if (isKeepAliveNotificationEnabled) {
+                    stringResource(R.string.keep_alive_status_active)
+                } else {
+                    stringResource(R.string.keep_alive_status_off)
+                },
+                statusTag = DashboardTags.KEEP_ALIVE_STATUS_TEXT,
+            )
+            Text(
+                text = if (isKeepAliveNotificationEnabled) {
+                    stringResource(R.string.keep_alive_status_active_desc)
+                } else {
+                    stringResource(R.string.keep_alive_status_off_desc)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!isKeepAliveNotificationEnabled) {
+                Button(
+                    onClick = onEnableKeepAliveNotification,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON),
+                ) {
+                    Text(text = stringResource(R.string.enable_keep_alive_notification))
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Text(
+                text = stringResource(R.string.autostart_guidance_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.autostart_guidance_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = onOpenAutostartSettings,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(DashboardTags.OPEN_AUTOSTART_BUTTON),
+            ) {
+                Text(text = stringResource(R.string.open_autostart_settings))
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Text(
+                text = stringResource(R.string.restricted_settings_tip_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.restricted_settings_tip_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = onOpenAppInfo,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(DashboardTags.OPEN_APP_INFO_BUTTON),
+            ) {
+                Text(text = stringResource(R.string.open_app_info))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReliabilityStatusRow(
+    indicatorColor: androidx.compose.ui.graphics.Color,
+    text: String,
+    statusTag: String,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(indicatorColor),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.testTag(statusTag),
+        )
     }
 }
 
