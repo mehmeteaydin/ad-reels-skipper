@@ -193,7 +193,6 @@ class MainActivity : ComponentActivity() {
                 onOpenBatterySettings = ::openBatteryOptimizationSettings,
                 onEnableKeepAliveNotification = ::enableKeepAliveNotification,
                 onOpenAutostartSettings = ::openAutostartSettings,
-                onOpenAppInfo = ::openAppInfoSettings,
                 onToggleMaster = dashboardViewModel::setMasterEnabled,
                 onSkipDelayChange = dashboardViewModel::setSkipDelayMs,
                 onKeywordInputChange = dashboardViewModel::onKeywordInputChange,

@@ -1,236 +1,103 @@
-# ANEW — AI Native Engineering Workspace
+# Ad Reels Skipper
 
-**A general-purpose, technology-agnostic bootstrap for building software with AI — under control.**
+**Privacy-first Android Accessibility Service that automatically detects and skips sponsored Instagram Reels — 100% on-device with zero internet permission.**
 
-> It doesn't matter what you're building. ANEW gives you a starting environment where context,
-> decisions, specs, roles, quality gates, and verification are managed in files — not lost in chat.
+`Ad Reels Skipper` (`com.adreels.skipper`) monitors the active Instagram (`com.instagram.android`) window locally using Android's Accessibility API, detects sponsored Reels labels in-memory, and dispatches a natural upward swipe gesture after a configurable delay.
 
-**New here?** The [command reference](docs/commands.md) shows every command, where it stops, and how
-lite and strict differ — one page.
+## Features
 
-Use this repo as a GitHub template (or drop it into an existing project), install the adapter for
-your AI tool, run the bootstrap workflow, and start your first feature. No frameworks, no
-dependencies, no code generators — a working *system*, written in Markdown plus a few small POSIX scripts.
+- **Automatic Sponsored Reel Skipping**: Detects sponsored Reels and dispatches an upward swipe gesture automatically when the **Auto-Skip Sponsored Reels** master toggle is on (`150 ms` default delay, configurable from `50 ms` to `2000 ms` in `50 ms` steps).
+- **Built-in & Custom Keywords**: Ships with read-only built-in labels (`Sponsored`, `Sponsorlu`, `Paid partnership`) and supports user-defined custom keywords (`2`–`40` characters, case- and Turkish-locale-folded matching).
+- **Live 3-State Service Status**: Distinguishes **Permission Required** (onboarding), **Service Active** (connected in-process), and **Service Stopped** (system killed the background binding, with one-tap reconnect to Accessibility Settings).
+- **Weekly Activity & History**: Tracks lifetime skipped Reels plus a **Monday–Sunday** weekly bar chart and browsable **Past Weeks** archive, persisted locally via Jetpack Preferences DataStore.
+- **Background Reliability & Silent Keep-Alive**:
+  - Promotes `SkipperAccessibilityService` to a silent, low-priority ongoing Foreground Service (`IMPORTANCE_MIN`, `specialUse`) while connected and active so OEM "Clear All" cleanups do not stop ad detection.
+  - Provides in-app **Background Reliability** shortcuts for **Battery Optimization** (`Unrestricted`), **Keep-Alive Notification** (`POST_NOTIFICATIONS`), and **Xiaomi / OEM Autostart Settings**.
 
-## Why this exists
+## Privacy & Security Model
 
-AI lowers development latency — and amplifies decision errors. A misunderstood requirement once
-cost a developer two weeks; an agent now ships the same misunderstanding in twenty minutes, with
-green tests. The bottleneck has moved from writing code to deciding correctly and proving it. ANEW
-is built for that bottleneck: it does not make the AI write more code; it makes the AI work inside
-an engineering process.
+- **Zero Network Access**: `AndroidManifest.xml` does **not** declare `android.permission.INTERNET` and the app includes no HTTP clients, analytics, or telemetry SDKs.
+- **In-Memory Inspection Only**: Accessibility node text is inspected strictly in memory to match ad keywords and is never stored on disk, logged, or transmitted.
+- **Least-Privilege Permissions & Scope**:
+  - Manifest declares exclusively three permissions: `android.permission.FOREGROUND_SERVICE`, `android.permission.FOREGROUND_SERVICE_SPECIAL_USE`, and `android.permission.POST_NOTIFICATIONS`.
+  - `accessibility_service_config.xml` is restricted strictly to `com.instagram.android` (`canRetrieveWindowContent="true"`, `canPerformGestures="true"`, no interactive multi-window flags).
+  - `android:allowBackup="false"` prevents local preferences from being backed up off-device.
+  - `android:stopWithTask="false"` preserves service binding across task removal, paired with static privacy-safe foreground notification text.
 
-Most AI coding advice is prose nobody enforces. An AI agent's behavior is only shaped by three
-mechanical channels:
+## Installation & Device Setup
 
-1. **Context it auto-loads.** `AGENTS.md` is read at session start by every major agent. Everything
-   else matters only if it's pointed to from there.
-2. **Verification it can run.** Agents work in a run–test–fix loop. When checking is one cheap
-   command (`scripts/check`), the agent disciplines itself. When it isn't, the agent says "done"
-   without proof.
-3. **Rules it cannot bypass.** Prose is advice; tooling is law. Hooks, permission denies, and CI
-   gates don't rely on the agent remembering anything.
+**Requirements:** Android 8.0+ (`minSdk 26`, `targetSdk 35`), Instagram for Android (`com.instagram.android`).
 
-Every file in ANEW connects to one of these channels — plus one more thing prose can't give you:
-**process memory.** Intent, decisions, and evidence live in files that survive every session.
+### 1. Sideloaded APK on Android 13+ ("Restricted setting")
 
-## The three layers
+When installing via APK outside a store on Android 13 or newer, Android initially locks Accessibility toggles for sideloaded apps:
 
-| Layer | What | Ages with |
+1. Open Android **Settings → Apps → Ad Reels Skipper** (App Info).
+2. Tap the **⋮** menu in the top-right corner and select **Allow restricted settings**.
+3. Return to **Settings → Accessibility → Ad Reels Skipper** and enable the service.
+
+### 2. Xiaomi (MIUI / HyperOS) & OEM Background Reliability
+
+To prevent Xiaomi MIUI/HyperOS or other aggressive OEMs from stopping the service when tapping **Clear All** in Recent Apps:
+
+1. Open **Ad Reels Skipper** and scroll to the **Background Reliability** card.
+2. Tap **Enable Keep-Alive Notification** so the silent protection notification is permitted.
+3. Tap **Configure Battery Settings** and set battery usage to **Unrestricted**.
+4. Tap **Open Autostart Settings** and enable **Autostart** for **Ad Reels Skipper**.
+5. Optionally open **Recent Apps**, press and hold the **Ad Reels Skipper** card, and tap the **Lock** icon.
+6. Enable **Ad Reels Skipper** from the top card (**Enable Accessibility Service**).
+
+## Architecture
+
+The codebase separates Android platform integration from pure Kotlin domain rules:
+
+| Package | Responsibility | Boundary |
 |---|---|---|
-| **Core** (`docs/`, `specs/`, `workflows/`, `prompts/`, `scripts/`, `AGENTS.md`) | The system: context, specs, ADRs, roles, gates, verification, recovery. 100% tool- and stack-agnostic. | Engineering practice (slowly) |
-| **Adapters** (`adapters/`) | Thin per-tool wiring: Claude Code, GitHub Copilot, Cursor, Codex, generic. Pointers + tool-specific extras only — rules are never duplicated here. | AI tools (they change; core doesn't) |
-| **Packs** (roadmap) | Optional stack presets (JVM/Spring, Node, Python, React): conventions/testing/CI suggestions. Not in v1 — the core works without them. | Ecosystems |
+| `com.adreels.skipper.domain` | Keyword matching/validation, cooldown & debounce rules, weekly skip aggregation | Pure Kotlin only — zero `android.*` / `androidx.*` imports |
+| `com.adreels.skipper.data` | Local persistence for settings, keywords, weekly counts, and lifetime skips | Jetpack Preferences DataStore (`StateFlow`) |
+| `com.adreels.skipper.service` | `SkipperAccessibilityService`, gesture dispatch, silent keep-alive foreground service | Bound via `BIND_ACCESSIBILITY_SERVICE`, `com.instagram.android` only |
+| `com.adreels.skipper.ui` | Material 3 Jetpack Compose dashboard and `DashboardViewModel` | Unidirectional data flow — zero `AccessibilityService` or gesture API references |
 
-## Quickstart
+Architectural boundaries are enforced automatically by unit tests (`DomainArchitectureTest`, `ManifestVerificationTest`).
+
+## Building & Local Release Signing
+
+**Prerequisites:** JDK 17 and Android SDK Platform / Build-Tools 35 (`ANDROID_HOME`).
 
 ```bash
-# 1. Use this template on GitHub (or copy the files into an existing repo) — for a pinned
-#    version (training, adoption): git clone --branch v1.24.1 (README, Versions and support). Then:
-./scripts/init claude-code        # or: github-copilot | cursor | codex | generic
-
-# 2. Open your AI tool and run the bootstrap workflow
-#    Claude Code / Cursor / Copilot:  /bootstrap    Codex:  $bootstrap
-#    Other tools:  paste prompts/bootstrap.md
-
-# 3. The AI first asks two things: interview language and document language (recorded in
-#    AGENTS.md — permanent). Then it interviews you — product, domain, stack, boundaries,
-#    conventions, mode — and fills docs/, AGENTS.md, and scripts/check.conf from your answers.
-
-./scripts/doctor                  # 4. Confirm the workspace is healthy
-
-# 5. Start your first feature (Claude Code, Cursor, Copilot and Codex share the same commands;
-#    in Codex they are skills, typed with $ instead of /: $new-feature, $analyze, ...)
-#    lite mode:     /new-feature "short description"    # chains the segments, asks at each gate
-#    strict mode:   /analyze "short description"        # one segment per role, one role per session
-#    existing behavior must change:  /change "<request> <work item>"
-#    any other tool: adapters/generic/README.md (paste the prompts by hand)
+# Build debug APK
+./gradlew :app:assembleDebug --no-daemon
 ```
 
-Works for **new projects** (empty repo) and **existing codebases** (bootstrap detects your stack
-and adapts the rules to what's already there).
+### Optional Local Release APK Signing
 
-## The loop
+Release builds (`:app:assembleRelease`) stay unsigned by default unless all four release signing values are supplied locally via gitignored `keystore.properties` in the project root:
 
-Every piece of work runs through a workflow, and every workflow follows the same spine:
-
+```properties
+storeFile=/path/to/your-release.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
 ```
-INTENT → CLARIFY → SPEC → PLAN → [HUMAN APPROVAL] → BUILD
-       → INDEPENDENT REVIEW → [HUMAN TRIAGE] → VERIFY → SHIP
+
+Or via environment variables:
+
+```bash
+export SKIPPER_KEYSTORE_FILE=/path/to/your-release.jks
+export SKIPPER_KEYSTORE_PASSWORD=...
+export SKIPPER_KEY_ALIAS=...
+export SKIPPER_KEY_PASSWORD=...
+./gradlew :app:assembleRelease --no-daemon
 ```
 
-Two human checkpoints are never automated: **plan approval** and **finding triage**. Spec approval
-is always asked as well — in lite mode a quick yes/no, never skipped, because it is PLAN's entry
-condition.
+> Never commit `keystore.properties`, `*.jks`, or `*.keystore` files.
 
-Each stage is a *segment* with an entry condition and a handoff written to files (the spec's
-`Status`, the plan's `Approved by / on` line). The rule:
-**Segments always stop; /new-feature flows only as far as the mode allows.**
+## Verification & Project Docs
 
-### Segment commands (every adapter; defined once in `workflows/segments.md`)
+This repository uses a spec-driven engineering workflow (`AGENTS.md`, `docs/`, `specs/`):
 
-| Command | What it does | Stops at |
-|---|---|---|
-| `/new-feature "<feature>"` | **Lite: start here.** Chainer — runs the segments below in order and asks at every gate. In `strict` it refuses and redirects to the segment commands. | Each gate |
-| `/analyze "<feature>"` | Intent → clarify → spec (+ self-critique); refuses to open a twin spec | Spec `Status: Approved` → "Next: /plan" |
-| `/plan <NNNN>` | Plan from the spec; **refuses unless the spec is Approved** | Approval recorded in the plan → "Next: /build" |
-| `/build <NNNN>` | Implements the plan; **refuses unless `Approved by / on` is filled**; sets `In progress` | `scripts/check` green with output → "Next: /review" |
-| `/review <NNNN>` | Independent review — read-only where the tool supports it (see "How strongly is each rule held?") | Findings report → human triage |
-| `/verify <NNNN>` | QA: criterion ↔ evidence table | Table → human ship |
-| `/change "<request> <work item>"` | Change an existing behavior: triage rubric (bug → `/fix-bug` · trivial → one commit per `docs/git.md` policy · change → mini-spec lane), then the lane by mode (`workflows/change-request.md`) | Triage verdict; then the lane's gates |
-| `/bootstrap` · `/fix-bug` · `/refactor` · `/adr` · `/recover` | Other workflows — same commands in Claude Code, Cursor, Copilot and Codex; any other tool pastes the prompts | Their gates |
-
-Claude Code and Cursor expose these as slash commands, GitHub Copilot as prompt files, Codex as
-project-level skills (`$analyze`, explicit only; it reads `AGENTS.md` natively), and any
-other tool by pasting the prompts (`adapters/generic/README.md`). CI runs `scripts/doctor --strict`,
-so the spec/plan gates hold whichever tool produced the PR.
-
-### Two operating modes
-
-Chosen at bootstrap, recorded in `AGENTS.md`, honored by every workflow:
-
-| | **Lite** — solo developers, low-risk work | **Strict** — teams, critical systems |
-|---|---|---|
-| Spine | Spec → Plan → Build → Review → Verify | Full spine incl. Intent → Clarify |
-| Human gates | Spec approval (light yes/no) · plan approval; `/new-feature` also asks at triage and ship | Spec approval · plan approval · finding triage · ship decision |
-| Review | Independent (separate session/subagent) | Independent + one role per session (Documented; see the table below) |
-| Ceremony | Minimum viable | Full evidence trail |
-
-Running the full process on every project is unnecessary cost; running none is uncontrolled risk.
-Pick per project — or per feature.
-
-### How strongly is each rule held?
-
-Not every rule is held the same way, and not every tool can hold it the same way. Three levels:
-
-- **Documented** — the rule is written down; the agent is instructed to follow it.
-- **Validated** — a script detects a violation (`scripts/doctor` / `scripts/check`, locally and in CI).
-- **Enforced** — the tool physically prevents the action.
-
-| Rule | Claude Code | GitHub Copilot | Cursor | Codex | Other tools |
-|---|---|---|---|---|---|
-| Spec approved before plan | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) |
-| Plan approval recorded before build | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) |
-| Who approved the plan | Documented | Documented | Documented | Documented | Documented |
-| Producer ≠ verifier | Enforced (reviewer subagent has no Edit/Write; Bash kept for `scripts/check`, instructed never to write) | Enforced (reviewer agent, no edit tools; `runCommands` kept) | Documented (fresh chat) | Documented (fresh session) | Documented (fresh session) |
-| Shipped specs immutable | Enforced (hook, editor tools) + Validated (CI) | Documented (instruction) + Validated (CI) | Documented (rule) + Validated (CI) | Validated (CI) | Validated (CI) |
-| No force-push / hard reset | Enforced (permission deny) | Documented | Documented | Documented | Documented |
-| "Done" = `scripts/check` green | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) | Validated (CI) |
-| Evidence is referenced, not stored (no `evidence/`, no repo clone inside the repo) | Validated (doctor warns, every mode) | Validated (doctor warns, every mode) | Validated (doctor warns, every mode) | Validated (doctor warns, every mode) | Validated (doctor warns, every mode) |
-| `scripts/check` leaves nothing running, and no data for the next run | Documented (the residue test, `scripts/residue`, runs at bootstrap and whenever check.conf changes — not in CI; it does not measure data) | Documented (same) | Documented (same) | Documented (same) | Documented (same) |
-| UI specs define flow, states and the design link | Documented | Documented | Documented | Documented | Documented |
-| Evidence cites the full profile, not `--fast` | Validated (doctor warns: shipped specs, and the PR description in CI) | Validated (same) | Validated (same) | Validated (same) | Validated (same) |
-
-Segment commands also refuse out-of-order work (entry checks) — that is the agent following a
-Documented rule; CI is what makes it Validated.
-
-"Who approved" is Documented because a line in a file cannot prove identity. The real fix lives
-in the hosting platform, not in this repo: in strict mode, protect the default branch and require
-a pull-request review from `CODEOWNERS` — then the approver's identity comes from GitHub. The same
-branch protection setting makes "no force-push" Enforced for every tool.
-
-## What's in the box
-
-| Path | Purpose |
-|---|---|
-| `AGENTS.md` | The signpost every agent auto-loads: invariant rules, operating mode, where everything lives. Rewritten by bootstrap; invariants survive. |
-| `docs/` | Long-term memory: architecture, domain language, conventions, testing, security, git rules — templates filled at bootstrap. |
-| `docs/decisions/` | ADRs — decisions with rationale, so "why" survives the people and the sessions. The project's own decisions number from 0001; ANEW's design decisions live in `docs/decisions/anew/` (ANEW-0001 onward), so upgrades never collide with them. |
-| `docs/roles/` | Role cards bound to responsibility, not technology: analyst, developer, reviewer, QA. Producer and verifier are never the same session. |
-| `specs/` | One spec per piece of work: intent, behavior, testable acceptance criteria (`TEMPLATE-mini.md` for behavior changes: changed + preserved criteria). `active/` → `done/` (immutable once shipped). Plans live in `specs/plans/`. |
-| `workflows/` | The processes: bootstrap, feature-development, change-request, bug-fix, refactor, incident. Steps, roles, gates, evidence — each step points to its prompt. `segments.md` defines the feature stages as stop-at-handoff segments that every adapter maps onto. |
-| `prompts/` | Reusable prompt bodies with placeholders. `prompts/recovery/` is the catalog of safe ramps (R-01…R-13) for when things go wrong. |
-| `adapters/` | Per-tool wiring. `scripts/init <tool>` installs one. |
-| `scripts/check` | The single verification contract: humans, agents, hooks, and CI all run this one command. Stack-specific internals live in `check.conf`, written at bootstrap. `--fast` runs only the steps tagged `[fast]` for the inner loop; only the full run is evidence. Reports each step's duration and the total. |
-| `scripts/doctor` | Workspace health: structure, configuration state, adapter presence, spec/plan gate consistency (`--strict` in CI), evidence hygiene warnings. |
-| `scripts/residue` | The residue test (`docs/testing.md`, Resource hygiene): runs check twice and names every process check left running, judged by its parent chain (what others start meanwhile never counts; memory is reported, not judged). Bootstrap runs it for both profiles; BUILD reruns it whenever check.conf changes. |
-| `scripts/selftest` | Proves `scripts/check`, `scripts/doctor` and `scripts/residue` behave as documented: every scenario in a throwaway copy outside the repo. Runs in CI. |
-| `scripts/init` | Installs an adapter; keeps existing files unless `--force`. |
-| `CHANGELOG.md` | What changed between versions of the workspace, for template users upgrading their copy. |
-| `.anew-version` | The ANEW version this workspace is based on — the starting point of every upgrade (CHANGELOG, "How to upgrade"). `scripts/doctor` prints it. |
-| `.github/` | CI that runs the same `scripts/check`, `scripts/doctor --strict` and `scripts/selftest` + a PR template mirroring the gates. |
-
-## Design principles
-
-**Context lives in files, not in chat.** Sessions forget; files don't. Architecture, decisions,
-conventions, and specs are written down and pointed to — `AGENTS.md` stays a short signpost
-(≤ 40 lines), never a handbook, because long context files get ignored in the middle.
-
-**No spec, no code.** Work starts by writing down intent and testable acceptance criteria. The most
-expensive bugs happen before the first line of code — when human, business, and AI each understood
-a different sentence.
-
-**The producer never verifies its own work.** Review runs in a separate session (or a read-only
-subagent) that sees the diff and the spec — not the builder's rationalizations.
-
-**Evidence over claims.** "Done" means `scripts/check` is green and every acceptance criterion maps
-to a test or a reproducible observation. "It works" is not a status. Evidence is a pointer (test
-name + command), never a filed copy of output.
-
-**Proposal rule.** Every question, option, or finding an agent raises must include its own
-recommendation and rationale. The human decides — faster, with the agent's reasoning visible.
-
-**One verification contract.** There is exactly one way to ask "is this good?": `scripts/check`.
-The agent cannot pass locally and fail in CI by running different commands. It has two speeds —
-`--fast` to iterate, the full run as the only evidence — but never two contracts.
-
-## Scope
-
-ANEW governs the path from intent to merge: context, specification, plan, authorization,
-implementation, independent review, evidence. Release, deployment and production operations are
-deliberately out of scope — that is where organizations differ most and already have tooling;
-ANEW connects to it through `scripts/check` and CI instead of replacing it. The incident workflow
-(`workflows/incident.md`) is the existing bridge back from production into this loop.
-
-## Versions and support
-
-ANEW itself is versioned: every template release is a tag (`git checkout v1.24.1`);
-`CHANGELOG.md` says what each one changed.
-
-- **LTS line `1.24.x`: fixes only** — a script that does not behave as documented, a document
-  that contradicts another, a broken reference, a selftest that cannot fail, a security weakness
-  in a script or a rule. No new rule, no new behavior, no new step.
-- **Supported** until the next LTS is announced, and in any case until 2027-05-04 (6 months after
-  v1.24.1).
-- **`main` is current**: new work ships there as v1.25, v1.26, … — not LTS. GitHub's "Latest"
-  release is the newest current one.
-- **Start from a tag**, not the template button (it copies `main`): `git clone --branch v1.24.1`
-  or the release archive. Training and adoption pin a `v1.24.x` tag.
-- **Inside the line**, read `CHANGELOG.md` on the `lts/1.24` branch and apply the entries above
-  your base. **Leaving the line** for current: your base is v1.24.1 — apply every `main` entry above
-  it, skipping a fix marked "also in v1.24.n" when your base already holds v1.24.n.
-
-## Adapting it
-
-Everything is plain Markdown and POSIX shell — edit, don't fork the philosophy:
-
-- Gates too heavy? Switch the mode line in `AGENTS.md` to `lite`, or tailor workflows per project.
-- Tool not listed? Copy `adapters/generic/` and wire your own; core never changes.
-- Team doesn't work in English? The core stays English; your documents don't have to. Bootstrap asks
-  for the interview and document languages first and records them in `AGENTS.md`. Protocol fields
-  (`Status:` values, `Approved by / on:`) stay English so the gates keep working.
-- Want stack presets? That's the packs layer — coming after v1 proves the core.
-
-## License
-
-MIT
+```bash
+./scripts/check --fast     # Unit/Robolectric tests, ktlint, Detekt, and Android Lint
+./scripts/check            # Full verification: tests, lint, and APK build
+./scripts/doctor           # Workspace structure and spec/plan gate checks (--strict in CI)
+```

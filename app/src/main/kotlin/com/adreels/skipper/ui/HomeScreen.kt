@@ -79,7 +79,6 @@ internal object DashboardTags {
     const val KEEP_ALIVE_STATUS_TEXT = "KeepAliveStatusText"
     const val ENABLE_KEEP_ALIVE_BUTTON = "EnableKeepAliveButton"
     const val OPEN_AUTOSTART_BUTTON = "OpenAutostartButton"
-    const val OPEN_APP_INFO_BUTTON = "OpenAppInfoButton"
     const val WEEKLY_ACTIVITY_CARD = "WeeklyActivityCard"
     const val WEEKLY_RANGE_TEXT = "WeeklyRangeText"
     const val WEEKLY_TOTAL_TEXT = "WeeklyTotalText"
@@ -111,7 +110,6 @@ fun HomeScreen(
     onOpenBatterySettings: () -> Unit = {},
     onEnableKeepAliveNotification: () -> Unit = {},
     onOpenAutostartSettings: () -> Unit = {},
-    onOpenAppInfo: () -> Unit = {},
     onToggleMaster: (Boolean) -> Unit = {},
     onSkipDelayChange: (Long) -> Unit = {},
     onKeywordInputChange: (String) -> Unit = {},
@@ -168,7 +166,6 @@ fun HomeScreen(
                     onOpenBatterySettings = onOpenBatterySettings,
                     onEnableKeepAliveNotification = onEnableKeepAliveNotification,
                     onOpenAutostartSettings = onOpenAutostartSettings,
-                    onOpenAppInfo = onOpenAppInfo,
                 )
             }
 
@@ -956,7 +953,6 @@ private fun BackgroundReliabilityCard(
     onOpenBatterySettings: () -> Unit,
     onEnableKeepAliveNotification: () -> Unit,
     onOpenAutostartSettings: () -> Unit,
-    onOpenAppInfo: () -> Unit,
 ) {
     val batteryIndicatorColor = if (isBatteryUnrestricted) {
         MaterialTheme.colorScheme.secondary
@@ -1066,27 +1062,6 @@ private fun BackgroundReliabilityCard(
                     .testTag(DashboardTags.OPEN_AUTOSTART_BUTTON),
             ) {
                 Text(text = stringResource(R.string.open_autostart_settings))
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            Text(
-                text = stringResource(R.string.restricted_settings_tip_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(R.string.restricted_settings_tip_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(
-                onClick = onOpenAppInfo,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .testTag(DashboardTags.OPEN_APP_INFO_BUTTON),
-            ) {
-                Text(text = stringResource(R.string.open_app_info))
             }
         }
     }

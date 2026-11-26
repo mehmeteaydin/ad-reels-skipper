@@ -223,14 +223,8 @@ class DashboardReliabilityTest {
             autostartButton.fetchSemanticsNode().boundsInRoot.height >= minTouchTargetPx() - 1f,
             "Open Autostart Settings button must satisfy 48dp touch target",
         )
-
-        val appInfoButton = composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON)
-            .performScrollTo()
-            .assertIsDisplayed()
-        assertTrue(
-            appInfoButton.fetchSemanticsNode().boundsInRoot.height >= minTouchTargetPx() - 1f,
-            "Open App Info button must satisfy 48dp touch target",
-        )
+        composeTestRule.onNodeWithText("Android 13+ Sideloaded Install Tip").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Open App Info").assertDoesNotExist()
 
         captureStateScreenshotIfRequested("S-10a-battery-optimized.png")
 
@@ -256,12 +250,8 @@ class DashboardReliabilityTest {
         composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
             .performScrollTo()
             .assertIsDisplayed()
-        composeTestRule.onNodeWithText("Android 13+ Sideloaded Install Tip")
-            .performScrollTo()
-            .assertIsDisplayed()
-        composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON)
-            .performScrollTo()
-            .assertIsDisplayed()
+        composeTestRule.onNodeWithText("Android 13+ Sideloaded Install Tip").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Open App Info").assertDoesNotExist()
 
         captureStateScreenshotIfRequested("S-10b-battery-unrestricted.png")
     }
@@ -276,14 +266,7 @@ class DashboardReliabilityTest {
     }
 
     @Test
-    fun `app info battery autostart and notification fallbacks resolve safely when settings activities fail`() {
-        composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON)
-            .performScrollTo()
-            .performClick()
-        val appInfoIntent = Shadows.shadowOf(composeTestRule.activity).nextStartedActivity
-        assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, appInfoIntent?.action)
-        assertEquals("package:${composeTestRule.activity.packageName}", appInfoIntent?.data?.toString())
-
+    fun `battery autostart and notification fallbacks resolve safely when settings activities fail`() {
         // Verify Xiaomi MIUI Autostart intent and fallback on both ActivityNotFoundException and SecurityException.
         composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON)
             .performScrollTo()
@@ -353,7 +336,6 @@ class DashboardReliabilityTest {
         composeTestRule.onNodeWithTag(DashboardTags.CONFIGURE_BATTERY_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(DashboardTags.ENABLE_KEEP_ALIVE_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithTag(DashboardTags.OPEN_AUTOSTART_BUTTON).performScrollTo().performClick()
-        composeTestRule.onNodeWithTag(DashboardTags.OPEN_APP_INFO_BUTTON).performScrollTo().performClick()
         composeTestRule.onNodeWithText("Service Stopped").performScrollTo().assertIsDisplayed()
     }
 }
