@@ -1,6 +1,6 @@
 # Spec 0009 — Foreground Keep-Alive Protection and OEM Autostart Guidance
 
-- Status: In progress
+- Status: Shipped
 - Mode: strict
 - Plan: `specs/plans/0009-plan.md`
 - Self-critique: done
@@ -49,25 +49,25 @@ Users running `Ad Reels Skipper` on OEM Android ROMs — especially Xiaomi Andro
   - Play Store publishing automation.
 
 ## Acceptance criteria
-- [ ] AC-1 — `AndroidManifest.xml` declares exclusively the 3-permission allow-list (`android.permission.FOREGROUND_SERVICE`, `android.permission.FOREGROUND_SERVICE_SPECIAL_USE`, `android.permission.POST_NOTIFICATIONS`, zero `INTERNET`), declares `foregroundServiceType="specialUse"` + subtype property and `stopWithTask="false"` on `SkipperAccessibilityService`, omits `excludeFromRecents="true"` on `MainActivity`, keeps `allowBackup="false"`, and keeps `accessibility_service_config.xml` strictly scoped to `com.instagram.android` with no `accessibilityFlags`.
-- [ ] AC-2 — On both API 33 (Xiaomi Android 13) and API 35, `SkipperAccessibilityService` promotes to a silent ongoing foreground notification (`IMPORTANCE_MIN`, static privacy-safe text, immutable `MainActivity` `PendingIntent`) on `onServiceConnected` when `Master Toggle` is `ON`, stops foreground (`STOP_FOREGROUND_REMOVE`) on `Master Toggle OFF` / `onUnbind` / `onDestroy`, re-enters foreground when `Master Toggle` turns back `ON`, and catches `RuntimeException` / `SecurityException` fail-safely without crashing.
-- [ ] AC-3 — Inside `BackgroundReliabilityCard` (`S-10a`/`S-10b` below `KeywordsCard`), the dashboard displays `"Keep-Alive Notification Off"` + `"Enable Keep-Alive Notification"` (`48.dp` min height) when notifications are disabled on Android 13+, updates to `"Keep-Alive Notification Active"` once granted/resumed, and falls back safely to notification/App Info settings without crashing, verified by Robolectric Compose UI tests and screenshots (`S-10a`, `S-10b`).
-- [ ] AC-4 — Inside `BackgroundReliabilityCard`, `"Open Autostart Settings"` (`48.dp` min height) attempts Xiaomi MIUI Autostart (`com.miui.securitycenter` / `com.miui.permcenter.autostart.AutoStartManagementActivity`), falls back cleanly to `ACTION_APPLICATION_DETAILS_SETTINGS` on `ActivityNotFoundException` / `SecurityException`, and recovers silently if no settings activity exists.
-- [ ] AC-5 — Existing dashboard states (`S-1`..`S-9`, including `S-1` initial-viewport visibility without scrolling), release signing contract, `domain` zero-`android.*` purity, `ui` zero-`AccessibilityService` isolation, and `INV-1`/`INV-2` remain intact.
-- [ ] AC-6 — `./scripts/check`, `./scripts/check --fast`, and `./scripts/doctor` succeed with zero failures.
+- [x] AC-1 — `AndroidManifest.xml` declares exclusively the 3-permission allow-list (`android.permission.FOREGROUND_SERVICE`, `android.permission.FOREGROUND_SERVICE_SPECIAL_USE`, `android.permission.POST_NOTIFICATIONS`, zero `INTERNET`), declares `foregroundServiceType="specialUse"` + subtype property and `stopWithTask="false"` on `SkipperAccessibilityService`, omits `excludeFromRecents="true"` on `MainActivity`, keeps `allowBackup="false"`, and keeps `accessibility_service_config.xml` strictly scoped to `com.instagram.android` with no `accessibilityFlags`.
+- [x] AC-2 — On both API 33 (Xiaomi Android 13) and API 35, `SkipperAccessibilityService` promotes to a silent ongoing foreground notification (`IMPORTANCE_MIN`, static privacy-safe text, immutable `MainActivity` `PendingIntent`) on `onServiceConnected` when `Master Toggle` is `ON`, stops foreground (`STOP_FOREGROUND_REMOVE`) on `Master Toggle OFF` / `onUnbind` / `onDestroy`, re-enters foreground when `Master Toggle` turns back `ON`, and catches `RuntimeException` / `SecurityException` fail-safely without crashing.
+- [x] AC-3 — Inside `BackgroundReliabilityCard` (`S-10a`/`S-10b` below `KeywordsCard`), the dashboard displays `"Keep-Alive Notification Off"` + `"Enable Keep-Alive Notification"` (`48.dp` min height) when notifications are disabled on Android 13+, updates to `"Keep-Alive Notification Active"` once granted/resumed, and falls back safely to notification/App Info settings without crashing, verified by Robolectric Compose UI tests and screenshots (`S-10a`, `S-10b`).
+- [x] AC-4 — Inside `BackgroundReliabilityCard`, `"Open Autostart Settings"` (`48.dp` min height) attempts Xiaomi MIUI Autostart (`com.miui.securitycenter` / `com.miui.permcenter.autostart.AutoStartManagementActivity`), falls back cleanly to `ACTION_APPLICATION_DETAILS_SETTINGS` on `ActivityNotFoundException` / `SecurityException`, and recovers silently if no settings activity exists.
+- [x] AC-5 — Existing dashboard states (`S-1`..`S-9`, including `S-1` initial-viewport visibility without scrolling), release signing contract, `domain` zero-`android.*` purity, `ui` zero-`AccessibilityService` isolation, and `INV-1`/`INV-2` remain intact.
+- [x] AC-6 — `./scripts/check`, `./scripts/check --fast`, and `./scripts/doctor` succeed with zero failures.
 
 ## Definition of Done
-- [ ] Every acceptance criterion mapped to proof (test or reproducible observation)
-- [ ] `scripts/check` green
-- [ ] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
-- [ ] Docs / ADRs updated if behavior or architecture changed
-- [ ] Spec moved to `specs/done/` (it becomes immutable there)
+- [x] Every acceptance criterion mapped to proof (test or reproducible observation)
+- [x] `scripts/check` green
+- [x] Independent review done; real findings fixed, noise rejected with written rationale, deferred ones in `specs/backlog.md`
+- [x] Docs / ADRs updated if behavior or architecture changed
+- [x] Spec moved to `specs/done/` (it becomes immutable there)
 
 ## Scorecard (fill at ship — honest numbers make the process improvable)
 | Metric | Value |
 |---|---|
-| Spec revisions | |
-| Fix rounds | |
-| Review findings: real / noise / deferred | |
-| Regressions introduced | |
-| Bugs escaped to production | |
+| Spec revisions | 0 |
+| Fix rounds | 0 |
+| Review findings: real / noise / deferred | 0 real / 0 noise / 0 deferred |
+| Regressions introduced | 0 |
+| Bugs escaped to production | 0 |
