@@ -1,6 +1,6 @@
 # Spec 0010 — Remove Android 13+ Sideload Tip from Dashboard and Update README (mini)
 
-- Status: Approved
+- Status: In progress
 - Mode: strict
 - Plan: `specs/plans/0010-plan.md`
 - Self-critique: done

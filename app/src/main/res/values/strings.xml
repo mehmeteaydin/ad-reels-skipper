@@ -53,9 +53,6 @@
     <string name="battery_status_unrestricted">Battery Unrestricted</string>
     <string name="battery_status_unrestricted_desc">Battery usage is unrestricted for reliable background operation.</string>
     <string name="configure_battery_settings">Configure Battery Settings</string>
-    <string name="restricted_settings_tip_title">Android 13+ Sideloaded Install Tip</string>
-    <string name="restricted_settings_tip_desc">If the Accessibility toggle is locked on Android 13 or newer, open App Info → ⋮ → Allow restricted settings.</string>
-    <string name="open_app_info">Open App Info</string>
     <string name="special_use_fgs_subtype">Keeps local Instagram Reels sponsorship detection alive across OEM background cleanups.</string>
     <string name="keep_alive_channel_name">Background Protection</string>
     <string name="keep_alive_channel_desc">Silent ongoing notification that prevents the system from stopping Instagram Reels ad skipping.</string>
